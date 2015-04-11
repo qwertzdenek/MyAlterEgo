@@ -20,12 +20,7 @@ import cz.cuni.amis.pogamut.ut2004.bot.impl.UT2004Bot;
 import java.util.Collections;
 import java.util.LinkedList;
 
-/**
- *
- * @author zdenek
- */
 public class GoalManager {
-
     private final LinkedList<IGoal> goals = new LinkedList<IGoal>();
     private IGoal currentGoal = null;
     private UT2004Bot bot;
