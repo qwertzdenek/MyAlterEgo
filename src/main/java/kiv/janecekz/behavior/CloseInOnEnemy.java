@@ -72,4 +72,9 @@ public class CloseInOnEnemy extends Goal {
         runningToPlayer = false;
         bot.reset();
     }
+
+    @Override
+    public String toString() {
+        return "CloseInOnEnemy";
+    }
 }

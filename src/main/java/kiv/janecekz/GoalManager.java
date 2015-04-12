@@ -23,9 +23,9 @@ import java.util.LinkedList;
 public class GoalManager {
     private final LinkedList<IGoal> goals = new LinkedList<IGoal>();
     private IGoal currentGoal = null;
-    private UT2004Bot bot;
+    private MyAlterEgo bot;
 
-    public GoalManager(UT2004Bot bot) {
+    public GoalManager(MyAlterEgo bot) {
         this.bot = bot;
     }
 
@@ -48,13 +48,9 @@ public class GoalManager {
         }
 
         currentGoal = next_goal;
-
-//        bot.getLog().severe(
-//                String.format(
-//                        "Chosen goal pri %.2f: %s",
-//                        currentGoal.getPriority(),
-//                        currentGoal.toString()));
         currentGoal.perform();
+
+        bot.setPostfix(currentGoal.toString());
 
         return currentGoal;
     }

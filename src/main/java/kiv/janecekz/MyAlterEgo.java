@@ -37,13 +37,12 @@ import cz.cuni.amis.pogamut.base.utils.math.DistanceUtils.IGetDistance;
 import cz.cuni.amis.pogamut.base3d.worldview.object.ILocated;
 import cz.cuni.amis.pogamut.base3d.worldview.object.event.WorldObjectAppearedEvent;
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
-import cz.cuni.amis.pogamut.ut2004.agent.module.sensomotoric.Weapon;
 import cz.cuni.amis.pogamut.ut2004.agent.module.utils.TabooSet;
-import cz.cuni.amis.pogamut.ut2004.agent.navigation.UT2004PathAutoFixer;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.floydwarshall.FloydWarshallMap;
-import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.UT2004DistanceStuckDetector;
-import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.UT2004PositionStuckDetector;
-import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.UT2004TimeStuckDetector;
+import cz.cuni.amis.pogamut.ut2004.agent.navigation.navmesh.pathfollowing.UT2004AcceleratedPathExecutor;
+import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004DistanceStuckDetector;
+import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004PositionStuckDetector;
+import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004TimeStuckDetector;
 import cz.cuni.amis.pogamut.ut2004.bot.impl.UT2004Bot;
 import cz.cuni.amis.pogamut.ut2004.bot.params.UT2004BotParameters;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.UT2004ItemType;
@@ -95,12 +94,13 @@ public class MyAlterEgo extends UT2004BotTCController {
     TabooSet<Item> tabooItems;
     TabooSet<NavPoint> tabooNavPoints;
 
-    private UT2004PathAutoFixer autoFixer;
+//    private UT2004PathAutoFixer autoFixer;
     private GoalManager goalManager;
     private Heatup targetHU = new Heatup(5000);
     private GetItems getItemsGoal;
     private UnrealId whoNeedsMe;
     private UnrealId helper;
+    private String name;
 
     private IGetDistance<ILocated> getDistance = new DistanceUtils.IGetDistance<ILocated>() {
         @Override
@@ -109,6 +109,10 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
     };
 
+    private MyAlterEgoParams getBotParams() {
+        return (MyAlterEgoParams) bot.getParams();
+    }
+    
     /**
      * Initialize all necessary variables here, before the bot actually receives
      * anything from the environment.
@@ -117,7 +121,8 @@ public class MyAlterEgo extends UT2004BotTCController {
      */
     @Override
     public void prepareBot(UT2004Bot bot) {
-
+        tokenCounter = getBotParams().getOrder();
+        name = "Bot "+tokenCounter;
     }
 
     /**
@@ -145,10 +150,11 @@ public class MyAlterEgo extends UT2004BotTCController {
         if (navBuilder.isMapName("DM-1on1-Albatross")) {
             navBuilder.removeEdge("JumpSpot8", "PathNode88");
         }
+
         tabooItems = new TabooSet<Item>(bot);
         tabooNavPoints = new TabooSet<NavPoint>(bot);
 
-        goalManager = new GoalManager(bot);
+        goalManager = new GoalManager(this);
 
         goalManager.addGoal(new GetEnemyFlag(this));
         goalManager.addGoal(new GetOurFlag(this));
@@ -156,21 +162,15 @@ public class MyAlterEgo extends UT2004BotTCController {
         goalManager.addGoal(getItemsGoal = new GetItems(this));
         goalManager.addGoal(new CloseInOnEnemy(this));
 
-        // add stuck detector that watch over the path-following, if it
-        // (heuristically) finds out that the bot has stuck somewhere,
-        // it reports an appropriate path event and the path executor will stop
-        // following the path which in turn allows
-        // us to issue another follow-path command in the right time
-        navigation.getPathExecutor().addStuckDetector(new UT2004TimeStuckDetector(bot, 3000, 10000));
-        // if the bot does not move for 3 seconds, considered that it is stuck
-        navigation.getPathExecutor().addStuckDetector(new UT2004PositionStuckDetector(bot));
-        // watch over the position history of the bot, if the bot does not move sufficiently enough, consider that it is stuck
-        navigation.getPathExecutor().addStuckDetector(new UT2004DistanceStuckDetector(bot)); // watch over distances to target
+        UT2004AcceleratedPathExecutor accPathExecutor = ((UT2004AcceleratedPathExecutor) nmNav.getPathExecutor());
+        accPathExecutor.removeAllStuckDetectors();
 
-        autoFixer = new UT2004PathAutoFixer(bot, navigation.getPathExecutor(), fwMap, aStar, navBuilder); // auto-removes wrong navigation links between navpoints
+        accPathExecutor.addStuckDetector(new AccUT2004TimeStuckDetector(bot, 3000, 10000));
+        accPathExecutor.addStuckDetector(new AccUT2004PositionStuckDetector(bot));
+        accPathExecutor.addStuckDetector(new AccUT2004DistanceStuckDetector(bot));
 
         // listeners
-        navigation.getPathExecutor().getState().addStrongListener(new FlagListener<IPathExecutorState>() {
+        nmNav.getPathExecutor().getState().addStrongListener(new FlagListener<IPathExecutorState>() {
             @Override
             public void flagChanged(IPathExecutorState changedValue) {
                 pathExecutorStateChange(changedValue.getState());
@@ -180,8 +180,10 @@ public class MyAlterEgo extends UT2004BotTCController {
         weaponPrefs.addGeneralPref(UT2004ItemType.MINIGUN, true);
         weaponPrefs.addGeneralPref(UT2004ItemType.LINK_GUN, false); // secondary
 
+        weaponPrefs.newPrefsRange(100).add(UT2004ItemType.SHIELD_GUN, true);
         weaponPrefs.newPrefsRange(300).add(UT2004ItemType.FLAK_CANNON, true).add(UT2004ItemType.LINK_GUN, true);
-        weaponPrefs.newPrefsRange(1000).add(UT2004ItemType.MINIGUN, true).add(UT2004ItemType.ROCKET_LAUNCHER, true);
+        weaponPrefs.newPrefsRange(1000).add(UT2004ItemType.MINIGUN, true);
+        weaponPrefs.newPrefsRange(1300).add(UT2004ItemType.LIGHTNING_GUN, true).add(UT2004ItemType.SHOCK_RIFLE, true);
     }
 
     /**
@@ -377,23 +379,16 @@ public class MyAlterEgo extends UT2004BotTCController {
                 // path execution has stopped
                 pathTarget = null;
                 break;
+            case PATH_COMPUTED:
+                break;
         }
     }
 
     public boolean ammoOK() {
         boolean state = true;
 
-        for (Weapon entry : weaponry.getWeapons().values()) {
-            if (entry.getType() == UT2004ItemType.TRANSLOCATOR || entry.getType() == UT2004ItemType.SHIELD_GUN) {
-                continue;
-            }
-            int halfAmmo = entry.getDescriptor().getPriMaxAmount() / 2 + entry.getDescriptor().getSecMaxAmount() / 2;
-            if (entry.getAmmo() < halfAmmo) {
-                state = false;
-            }
-        }
-
-        if (weaponry.getWeapons().size() <= 3) {
+        if (weaponry.getCurrentAmmo() < weaponry.getCurrentWeapon().getDescriptor().getPriMaxAmount() / 2 ||
+            weaponry.getWeapons().size() <= 3) {
             state = false;
         }
 
@@ -404,8 +399,8 @@ public class MyAlterEgo extends UT2004BotTCController {
         Player pl = DistanceUtils.getNearest(players.getFriends().values(), info.getLocation());
         if (pl == null || (whoNeedsMe != null && whoNeedsMe.equals(pl.getId())))
             return;
-        tcClient.sendToBot(pl.getId(), new TCSupportMe(info.getId()));
         helper = pl.getId();
+        tcClient.sendToBot(helper, new TCSupportMe(info.getId()));
     }
 
     public void dismissHelp() {
@@ -421,7 +416,10 @@ public class MyAlterEgo extends UT2004BotTCController {
 
         @Override
         public int getNodeExtraCost(NavPoint node, int mapCost) {
-            return 0;
+            if (isDangerous(node))
+                return 100;
+            else
+                return 0;
         }
 
         @Override
@@ -431,7 +429,7 @@ public class MyAlterEgo extends UT2004BotTCController {
 
         @Override
         public boolean isNodeOpened(NavPoint node) {
-            return !isDangerous(node);
+            return true;
         }
 
         @Override
@@ -445,11 +443,11 @@ public class MyAlterEgo extends UT2004BotTCController {
         if (pathTarget == null || !target.equals(pathTarget)) {
             pathTarget = target;
             actualPath = generateCoverPath(target);
-            navigation.stopNavigation();
+            nmNav.stopNavigation();
             if (actualPath == null) {
                 navigateStandard(target);
             } else {
-                navigation.navigate((IPathFuture) actualPath);
+                nmNav.navigate((IPathFuture) actualPath);
             }
         }
     }
@@ -481,13 +479,13 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateCoverPath(navigation.getNearestNavPoint(target));
+        navigateCoverPath(nmNav.getNearestNavPoint(target));
 
         return true;
     }
 
     private void navigateStandard(NavPoint target) {
-        navigation.navigate(target);
+        nmNav.navigate(target);
     }
 
     public boolean goTo(NavPoint target) {
@@ -505,7 +503,7 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateStandard(navigation.getNearestNavPoint(target));
+        navigateStandard(nmNav.getNearestNavPoint(target));
 
         return true;
     }
@@ -519,7 +517,8 @@ public class MyAlterEgo extends UT2004BotTCController {
         } else {
             pathTarget = t2;
         }
-        navigation.navigate(pathTarget);
+        nmNav.navigate(navPoints.getNavPoint("CTF-Citadel.Teleporter1"));
+        nmNav.setContinueTo(navPoints.getNavPoint("CTF-Citadel.InventorySpot217"));
 
         return true;
     }
@@ -600,6 +599,13 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
     }
 
+    public void coverYourself() { // TODO: protect from the agressive player
+        Player p = DistanceUtils.getNearest(players.getVisibleEnemies().values(), info.getLocation());
+        if (p == null)
+            return;
+        shoot.shoot(weaponry.getWeapon(UT2004ItemType.SHIELD_GUN), false, p.getId());
+    }
+
     /**
      * Main method that controls the bot - makes decisions what to do next. It
      * is called iteratively by Pogamut engine every time a synchronous batch
@@ -611,6 +617,11 @@ public class MyAlterEgo extends UT2004BotTCController {
     @Override
     public void logic() throws PogamutException {
         goalManager.executeBestGoal();
+        
+//        if (tokenCounter == 0) {
+//            tcClient.sendToBot(nejbližší k vlajce, TCGetOurFlag);
+//            tcClient.sendToBot(ostatní, TCGetEnemyFlag);
+//        }
 
         // Dodging!!
 //        Collection<IncomingProjectile> projectiles = world.getAll(IncomingProjectile.class).values();
@@ -655,7 +666,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public int supportPriority() {
-        return whoNeedsMe == null ? 0 : 60;
+        return whoNeedsMe == null ? 0 : 70;
     }
 
     public ILocated supportTarget() {
@@ -664,6 +675,10 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     public TabooSet<Item> getTaboo() {
         return tabooItems;
+    }
+
+    public void setPostfix(String s) {
+        config.setName(name + ": " + s);
     }
 
     public boolean isDangerous(ILocated node) {
@@ -683,7 +698,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     public void reset() {
         enemy = null;
         pathTarget = null;
-        navigation.stopNavigation();
+        nmNav.stopNavigation();
         shoot.stopShooting();
         whoNeedsMe = null;
     }
@@ -698,12 +713,12 @@ public class MyAlterEgo extends UT2004BotTCController {
         UT2004TCServer.startTCServer();
 
         new UT2004BotRunner<UT2004Bot, UT2004BotParameters>(MyAlterEgo.class, "TeamCTF").setMain(true).setHost("localhost").setLogLevel(Level.WARNING).startAgents(
-                new UT2004BotParameters().setTeam(0),
-                new UT2004BotParameters().setTeam(0),
-                new UT2004BotParameters().setTeam(0),
-                new UT2004BotParameters().setTeam(1),
-                new UT2004BotParameters().setTeam(1),
-                new UT2004BotParameters().setTeam(1)
+                new MyAlterEgoParams().setTeam(0).setOrder(0),
+                new MyAlterEgoParams().setTeam(0).setOrder(1),
+                new MyAlterEgoParams().setTeam(0).setOrder(2),
+                new MyAlterEgoParams().setTeam(1).setOrder(0),
+                new MyAlterEgoParams().setTeam(1).setOrder(1),
+                new MyAlterEgoParams().setTeam(1).setOrder(2)
         );
     }
 }

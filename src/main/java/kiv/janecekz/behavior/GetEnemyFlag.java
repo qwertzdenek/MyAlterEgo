@@ -39,7 +39,6 @@ public class GetEnemyFlag extends Goal {
             } else {
                 if (bot.getCTF().isEnemyFlagHome()) {
                     bot.goCovered(bot.getEnemyFlagBase().getLocation());
-                    bot.callHelp();
                 } else {
                     Location target = bot.getEnemyFlag().getLocation();
                     if (target == null) {
@@ -53,6 +52,7 @@ public class GetEnemyFlag extends Goal {
             bot.goCovered(bot.getEnemyFlagBase().getLocation());
         }
 
+        bot.callHelp();
         bot.updateFight();
     }
 
@@ -80,5 +80,10 @@ public class GetEnemyFlag extends Goal {
     public void abandon() {
         bot.dismissHelp();
         bot.reset();
+    }
+
+    @Override
+    public String toString() {
+        return "GetEnemyFlag";
     }
 }

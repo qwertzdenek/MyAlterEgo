@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 package kiv.janecekz.behavior;
 
 import java.util.Set;
@@ -27,6 +26,7 @@ import kiv.janecekz.MyAlterEgo;
 public class GetHealth extends Goal {
 
     protected Item health = null;
+    protected boolean covering = false;
 
     public GetHealth(MyAlterEgo bot) {
         super(bot);
@@ -34,7 +34,11 @@ public class GetHealth extends Goal {
 
     @Override
     public void perform() {
-        bot.updateFight();
+        if (bot.isDangerous(bot.getInfo().getLocation())) {
+            bot.coverYourself();
+        } else {
+            bot.updateFight();
+        }
 
         if (health == null) {
             Set<Item> healths = bot.getTaboo().filter(
@@ -58,11 +62,7 @@ public class GetHealth extends Goal {
             this.health = winner;
         }
 
-        if (bot.getEnemyFlag() == null
-                || !bot.getInfo().getId()
-                .equals(bot.getEnemyFlag().getHolder())) {
-            bot.goCovered(health.getLocation());
-        }
+        bot.goCovered(health.getLocation());
     }
 
     @Override
@@ -90,6 +90,12 @@ public class GetHealth extends Goal {
 
     @Override
     public void abandon() {
+        this.health = null;
         bot.reset();
+    }
+
+    @Override
+    public String toString() {
+        return "GetHealth";
     }
 }

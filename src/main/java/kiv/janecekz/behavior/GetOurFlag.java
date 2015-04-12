@@ -113,4 +113,9 @@ public class GetOurFlag extends Goal {
     public void abandon() {
         bot.reset();
     }
+
+    @Override
+    public String toString() {
+        return "GetOurFlag";
+    }
 }

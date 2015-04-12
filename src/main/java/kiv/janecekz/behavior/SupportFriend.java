@@ -51,4 +51,9 @@ public class SupportFriend extends Goal {
     public void abandon() {
         bot.reset();
     }
+
+    @Override
+    public String toString() {
+        return "SupportFriend";
+    }
 }

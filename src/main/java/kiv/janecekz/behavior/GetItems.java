@@ -36,18 +36,16 @@ public class GetItems extends Goal {
 
     @Override
     public void perform() {
+        bot.updateFight();
+        
         if (item != null && bot.getInfo().atLocation(item)) {
             bot.getTaboo().add(item, 10);
             item = null;
-        }
-
-        if (item == null || !item.getNavPoint().isItemSpawned()) {
+        } else if (item == null || !item.getNavPoint().isItemSpawned()) {
             item = oneItem();
+
+            bot.goTo(item.getLocation());
         }
-
-        bot.goTo(item.getLocation());
-
-        bot.updateFight();
     }
 
     @Override
@@ -86,5 +84,10 @@ public class GetItems extends Goal {
                 return !bot.getTaboo().contains(object) && bot.getItems().isPickupSpawned(object) && bot.getItems().isPickable(object);
             }
         });
+    }
+
+    @Override
+    public String toString() {
+        return "GetItems";
     }
 }
