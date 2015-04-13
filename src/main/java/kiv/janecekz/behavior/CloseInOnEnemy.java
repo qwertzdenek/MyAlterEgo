@@ -31,7 +31,6 @@ public class CloseInOnEnemy extends Goal {
 
     @Override
     public void perform() {
-
         bot.updateFight();
 
         Player enemy = bot.getEnemy();
@@ -43,6 +42,7 @@ public class CloseInOnEnemy extends Goal {
             runningToPlayer = true;
         }
 
+        bot.callHelp();
     }
 
     @Override
@@ -70,6 +70,7 @@ public class CloseInOnEnemy extends Goal {
     @Override
     public void abandon() {
         runningToPlayer = false;
+        bot.dismissHelp();
         bot.reset();
     }
 

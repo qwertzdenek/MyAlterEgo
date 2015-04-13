@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 package kiv.janecekz.behavior;
 
 import cz.cuni.amis.pogamut.base3d.worldview.object.Location;
@@ -80,20 +79,16 @@ public class GetOurFlag extends Goal {
 
                 if (holder != null && bot.getPlayers().getFriends().size() > 1) {
                     if (holderId.equals(bot.getInfo().getId())
-                            || holder.getLocation().getDistance( // FIXME: what if holder null???
+                            || holder.getLocation().getDistance(
                                     bot.getInfo().getLocation())
                             < CAPTURE_SUPPORT_DISTANCE) {
-                        return 0d;
+                        return 30d;
                     }
                 } else {
-                    return 55d;
+                    return 70d;
                 }
             } else {
-                if (bot.getPlayers().getFriends().size() > 1) {
-                    return 0d;
-                } else {
-                    return 55d;
-                }
+                return 70d;
             }
         }
         return 20d;

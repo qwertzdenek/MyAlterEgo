@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 package kiv.janecekz.behavior;
 
+import cz.cuni.amis.pogamut.ut2004.communication.messages.ItemType;
+import cz.cuni.amis.pogamut.ut2004.communication.messages.UT2004ItemType;
 import java.util.LinkedList;
 
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Item;
@@ -37,7 +38,7 @@ public class GetItems extends Goal {
     @Override
     public void perform() {
         bot.updateFight();
-        
+
         if (item != null && bot.getInfo().atLocation(item)) {
             bot.getTaboo().add(item, 10);
             item = null;
@@ -50,9 +51,7 @@ public class GetItems extends Goal {
 
     @Override
     public double getPriority() {
-    itemsToRunAround = new LinkedList<Item>(bot.getItems()
-                .getVisibleItems()
-                .values());
+        itemsToRunAround = filterItems(UT2004ItemType.ADRENALINE_PACK);
 
         return 6 + itemsToRunAround.size() + (bot.ammoOK() ? 0 : 10);
     }
@@ -76,14 +75,26 @@ public class GetItems extends Goal {
     public Item getItem() {
         return item;
     }
-    
+
     public Item oneItem() {
         return bot.getFwMap().getNearestFilteredItem(bot.getItems().getAllItems().values(), bot.getInfo().getNearestNavPoint(), new IFilter<Item>() {
             @Override
             public boolean isAccepted(Item object) {
-                return !bot.getTaboo().contains(object) && bot.getItems().isPickupSpawned(object) && bot.getItems().isPickable(object);
+                return !bot.getTaboo().contains(object) && bot.getItems().isPickupSpawned(object) && bot.getItems().isPickable(object) && !object.getType().equals(UT2004ItemType.ADRENALINE_PACK);
             }
         });
+    }
+
+    public LinkedList<Item> filterItems(ItemType type) {
+        LinkedList<Item> res = new LinkedList<Item>();
+
+        for (Item i : res) {
+            if (!i.getType().equals(type)) {
+                res.add(i);
+            }
+        }
+
+        return res;
     }
 
     @Override

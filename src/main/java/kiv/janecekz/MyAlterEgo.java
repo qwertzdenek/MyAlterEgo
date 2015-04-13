@@ -35,6 +35,7 @@ import cz.cuni.amis.pogamut.base.utils.guice.AgentScoped;
 import cz.cuni.amis.pogamut.base.utils.math.DistanceUtils;
 import cz.cuni.amis.pogamut.base.utils.math.DistanceUtils.IGetDistance;
 import cz.cuni.amis.pogamut.base3d.worldview.object.ILocated;
+import cz.cuni.amis.pogamut.base3d.worldview.object.Location;
 import cz.cuni.amis.pogamut.base3d.worldview.object.event.WorldObjectAppearedEvent;
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.agent.module.utils.TabooSet;
@@ -65,6 +66,7 @@ import cz.cuni.amis.utils.exception.PogamutException;
 import cz.cuni.amis.utils.flag.FlagListener;
 import java.util.Collection;
 import java.util.logging.Level;
+import kiv.janecekz.behavior.SupportFriend;
 
 /**
  * My Alter Ego bot :).
@@ -98,8 +100,8 @@ public class MyAlterEgo extends UT2004BotTCController {
     private GoalManager goalManager;
     private Heatup targetHU = new Heatup(5000);
     private GetItems getItemsGoal;
-    private UnrealId whoNeedsMe;
-    private UnrealId helper;
+    public volatile UnrealId whoNeedsMe;
+    public volatile UnrealId helper;
     private String name;
 
     private IGetDistance<ILocated> getDistance = new DistanceUtils.IGetDistance<ILocated>() {
@@ -112,7 +114,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     private MyAlterEgoParams getBotParams() {
         return (MyAlterEgoParams) bot.getParams();
     }
-    
+
     /**
      * Initialize all necessary variables here, before the bot actually receives
      * anything from the environment.
@@ -161,6 +163,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         goalManager.addGoal(new GetHealth(this));
         goalManager.addGoal(getItemsGoal = new GetItems(this));
         goalManager.addGoal(new CloseInOnEnemy(this));
+        goalManager.addGoal(new SupportFriend(this));
 
         UT2004AcceleratedPathExecutor accPathExecutor = ((UT2004AcceleratedPathExecutor) nmNav.getPathExecutor());
         accPathExecutor.removeAllStuckDetectors();
@@ -239,7 +242,8 @@ public class MyAlterEgo extends UT2004BotTCController {
     // ENVIRONMENT CALLBACKS
     @ObjectClassEventListener(eventClass = WorldObjectAppearedEvent.class, objectClass = Player.class)
     public void playerAppeared(WorldObjectAppearedEvent<Player> event) {
-        tcClient.sendToTeam(new TCPlayerSeen(this, event.getObject().getId(), event.getObject().getLocation()));
+        if (tcClient.isConnected())
+            tcClient.sendToTeam(new TCPlayerSeen(this, event.getObject().getId(), event.getObject().getLocation()));
     }
 
 /*
@@ -256,7 +260,7 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     @EventListener(eventClass = TCIamOK.class)
     public void abbadonSupport(TCIamOK seen) {
-        if (whoNeedsMe.equals(seen.player)) {
+        if (whoNeedsMe != null && whoNeedsMe.equals(seen.player)) {
             whoNeedsMe = null;
         }
     }
@@ -278,7 +282,7 @@ public class MyAlterEgo extends UT2004BotTCController {
                 player.getName(),
                 player.isSpectator(),
                 player.getAction(),
-                visibility.isVisible(seen.location, info.getLocation()),
+                false,
                 player.getRotation(),
                 seen.location,
                 player.getVelocity(),
@@ -396,15 +400,23 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public void callHelp() {
+        Location myPos = info.getLocation();
         Player pl = DistanceUtils.getNearest(players.getFriends().values(), info.getLocation());
         if (pl == null || (whoNeedsMe != null && whoNeedsMe.equals(pl.getId())))
             return;
-        helper = pl.getId();
-        tcClient.sendToBot(helper, new TCSupportMe(info.getId()));
+        if (helper != null && myPos.getDistance(pl.getLocation()) < myPos.getDistance(players.getPlayer(helper).getLocation()))
+            dismissHelp();
+        if (tcClient.isConnected() && tcClient.isConnected(pl.getId())) {
+            helper = pl.getId();
+            tcClient.sendToBot(helper, new TCSupportMe(info.getId()));
+        }
     }
 
     public void dismissHelp() {
-        tcClient.sendToBot(helper, new TCIamOK(info.getId()));
+        if (helper != null && tcClient.isConnected() && tcClient.isConnected(helper)) {
+            tcClient.sendToBot(helper, new TCIamOK(info.getId()));
+            helper = null;
+        }
     }
 
     private class CoverMapView implements IPFMapView<NavPoint> {
@@ -591,19 +603,25 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public void shoot() {
-        if (enemy != null && enemy.isVisible()) {
+        if (enemy != null && enemy.isVisible() && enemy.getLocation().getDistance(info.getLocation()) < 2000) {
             shoot.shoot(weaponPrefs, enemy);
+            nmNav.setFocus(enemy);
         } else {
             shoot.stopShooting();
+            nmNav.setFocus(null);
             enemy = null;
         }
     }
 
     public void coverYourself() { // TODO: protect from the agressive player
         Player p = DistanceUtils.getNearest(players.getVisibleEnemies().values(), info.getLocation());
-        if (p == null)
-            return;
-        shoot.shoot(weaponry.getWeapon(UT2004ItemType.SHIELD_GUN), false, p.getId());
+        if (p == null) {
+            nmNav.setFocus(null);
+            shoot.stopShooting();
+        } else {
+            nmNav.setFocus(p);
+            shoot.shoot(weaponry.getWeapon(UT2004ItemType.SHIELD_GUN), false, p.getId());
+        }
     }
 
     /**
@@ -617,7 +635,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     @Override
     public void logic() throws PogamutException {
         goalManager.executeBestGoal();
-        
+
 //        if (tokenCounter == 0) {
 //            tcClient.sendToBot(nejbližší k vlajce, TCGetOurFlag);
 //            tcClient.sendToBot(ostatní, TCGetEnemyFlag);
@@ -666,10 +684,12 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public int supportPriority() {
-        return whoNeedsMe == null ? 0 : 70;
+        return whoNeedsMe == null ? 0 : 60;
     }
 
     public ILocated supportTarget() {
+        if (whoNeedsMe == null || players.getPlayer(whoNeedsMe) == null)
+            return null;
         return players.getPlayer(whoNeedsMe).getLocation();
     }
 
@@ -700,7 +720,6 @@ public class MyAlterEgo extends UT2004BotTCController {
         pathTarget = null;
         nmNav.stopNavigation();
         shoot.stopShooting();
-        whoNeedsMe = null;
     }
 
     /**

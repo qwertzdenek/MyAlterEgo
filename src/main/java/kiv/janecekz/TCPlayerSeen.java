@@ -27,7 +27,7 @@ public class TCPlayerSeen extends TCMessageData {
     public final Location location;
 
     public TCPlayerSeen(MyAlterEgo aThis, UnrealId id, Location location) {
-        super(Tokens.get("TCEnemySeen"));
+        super(Tokens.get("TCPlayerSeen"));
         this.location = location;
         this.playerId = id;
     }

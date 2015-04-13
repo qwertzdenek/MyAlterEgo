@@ -23,7 +23,6 @@ import kiv.janecekz.Goal;
 import kiv.janecekz.MyAlterEgo;
 
 public class GetEnemyFlag extends Goal {
-
     public GetEnemyFlag(MyAlterEgo bot) {
         super(bot);
     }
@@ -35,7 +34,6 @@ public class GetEnemyFlag extends Goal {
 
             if (bot.getInfo().getId().equals(holderId)) {
                 bot.goTo(bot.getOurFlagBase().getLocation());
-                bot.callHelp();
             } else {
                 if (bot.getCTF().isEnemyFlagHome()) {
                     bot.goCovered(bot.getEnemyFlagBase().getLocation());
@@ -52,7 +50,8 @@ public class GetEnemyFlag extends Goal {
             bot.goCovered(bot.getEnemyFlagBase().getLocation());
         }
 
-        bot.callHelp();
+        if (bot.isDangerous(bot.getInfo().getLocation()))
+            bot.callHelp();
         bot.updateFight();
     }
 
@@ -62,7 +61,7 @@ public class GetEnemyFlag extends Goal {
                 && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
             return 50d;
         } else {
-            return 10d;
+            return 10d; // TODO: zvyšovat když držím token
         }
     }
 

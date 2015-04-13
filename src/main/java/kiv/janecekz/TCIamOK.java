@@ -19,11 +19,13 @@ package kiv.janecekz;
 
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.mina.messages.TCMessageData;
+import cz.cuni.amis.utils.token.Tokens;
 
 class TCIamOK extends TCMessageData {
     public final UnrealId player;
 
     public TCIamOK(UnrealId id) {
+        super(Tokens.get("TCIamOK"));
         this.player = id;
     }
 }

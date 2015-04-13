@@ -16,7 +16,6 @@
  */
 package kiv.janecekz;
 
-import cz.cuni.amis.pogamut.ut2004.bot.impl.UT2004Bot;
 import java.util.Collections;
 import java.util.LinkedList;
 
@@ -39,7 +38,6 @@ public class GoalManager {
     }
 
     public IGoal executeBestGoal() {
-
         Collections.sort(goals);
 
         IGoal next_goal = goals.peekFirst();
