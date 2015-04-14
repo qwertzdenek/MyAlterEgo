@@ -29,12 +29,23 @@ public class SupportFriend extends Goal {
     @Override
     public void perform() {
         bot.updateFight();
-        bot.goTo(bot.supportTarget());
+        int decentDistance = Math.round(bot.getRandom().nextFloat() * 100) + 50;
+        if (bot.supportTarget() != null && bot.getInfo().getDistance(bot.supportTarget()) > decentDistance) {
+            bot.goTo(bot.supportTarget());
+        }
     }
 
     @Override
     public double getPriority() {
-        return bot.supportPriority();
+        if (bot.getEnemyFlag() != null) {
+            if (bot.getEnemyFlag().getHolder() != null && bot.getEnemyFlag().getHolder().equals(bot.getInfo().getId())) {
+                return 0d;
+            } else {
+                return bot.supportPriority();
+            }
+        } else {
+            return bot.supportPriority();
+        }
     }
 
     @Override

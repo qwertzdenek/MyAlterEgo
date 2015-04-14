@@ -48,7 +48,7 @@ public class GoalManager {
         currentGoal = next_goal;
         currentGoal.perform();
 
-        bot.setPostfix(currentGoal.toString());
+        bot.setPostfix(currentGoal.toString()+" "+currentGoal.getPriority());
 
         return currentGoal;
     }

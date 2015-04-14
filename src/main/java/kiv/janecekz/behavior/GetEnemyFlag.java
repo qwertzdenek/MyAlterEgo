@@ -53,6 +53,7 @@ public class GetEnemyFlag extends Goal {
         if (bot.isDangerous(bot.getInfo().getLocation()))
             bot.callHelp();
         bot.updateFight();
+        bot.setBackup();
     }
 
     @Override
@@ -61,7 +62,7 @@ public class GetEnemyFlag extends Goal {
                 && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
             return 50d;
         } else {
-            return 10d; // TODO: zvyšovat když držím token
+            return 10d;
         }
     }
 

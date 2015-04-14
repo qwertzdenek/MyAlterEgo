@@ -40,38 +40,30 @@ public class GetHealth extends Goal {
             bot.updateFight();
         }
 
-        if (health == null) {
-            Set<Item> healths = bot.getTaboo().filter(
-                    bot.getItems().getSpawnedItems(
-                            Category.HEALTH).values());
+        Set<Item> healths = bot.getTaboo().filter(
+                bot.getItems().getSpawnedItems(
+                        Category.HEALTH).values());
 
-            double min_distance = Double.MAX_VALUE;
-            Item winner = null;
+        double min_distance = Double.MAX_VALUE;
+        Item winner = null;
 
-            for (Item item : healths) {
-                if (bot.isDangerous(item)) {
-                    continue;
-                }
-                double dist = item.getLocation().getDistance(
-                        bot.getInfo().getLocation());
-                if (dist < min_distance) {
-                    min_distance = dist;
-                    winner = item;
-                }
+        for (Item item : healths) { // FIXME: bots still can stuck ????
+            double dist = bot.getFwMap().getDistance(bot.getInfo().getNearestNavPoint(), item.getNavPoint());
+            if (dist < min_distance) {
+                min_distance = dist;
+                winner = item;
             }
-            this.health = winner;
         }
-
-        bot.goCovered(health.getLocation());
+        health = winner;
+        if (health != null) bot.goCovered(health.getLocation());
+        else bot.goCovered(bot.getOurFlagBase());
     }
 
     @Override
     public double getPriority() {
         if (bot.getItems().getAllItems(Category.HEALTH).size() > 0
-                && bot.getInfo().getHealth() < 20 && !(bot.getEnemyFlag() != null
-                && bot.getInfo().getId()
-                .equals(bot.getEnemyFlag().getHolder())
-                && bot.getInfo().atLocation(bot.getOurFlagBase(), 5d))) {
+                && bot.getInfo().getHealth() < 20
+                && !(bot.getEnemyFlag() != null && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder()))) {
             return 100d;
         }
 

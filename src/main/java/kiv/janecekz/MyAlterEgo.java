@@ -52,6 +52,7 @@ import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.BotKill
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.ConfigChange;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.FlagInfo;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.GameInfo;
+import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.IncomingProjectile;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.InitedMessage;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Item;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.NavPoint;
@@ -62,8 +63,10 @@ import cz.cuni.amis.pogamut.ut2004.utils.UT2004BotRunner;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.bot.UT2004BotTCController;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.server.UT2004TCServer;
 import cz.cuni.amis.utils.Heatup;
+import cz.cuni.amis.utils.collections.MyCollections;
 import cz.cuni.amis.utils.exception.PogamutException;
 import cz.cuni.amis.utils.flag.FlagListener;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.logging.Level;
 import kiv.janecekz.behavior.SupportFriend;
@@ -71,15 +74,12 @@ import kiv.janecekz.behavior.SupportFriend;
 /**
  * My Alter Ego bot :).
  * 
- * @author Zdeněk Janeček
+ * @author Zdenek Janecek
  */
 @AgentScoped
 public class MyAlterEgo extends UT2004BotTCController {
     @JProp
-    public boolean token = false;
-
-    @JProp
-    public int tokenCounter;
+    public int botID;
 
     /**
      * Used internally to maintain the information about the bot we're currently
@@ -96,9 +96,14 @@ public class MyAlterEgo extends UT2004BotTCController {
     TabooSet<Item> tabooItems;
     TabooSet<NavPoint> tabooNavPoints;
 
+    private boolean sniping = false;
+    private ArrayList<NavPoint> invSpots;
+    private ArrayList<NavPoint> snipSpots;
+    
 //    private UT2004PathAutoFixer autoFixer;
     private GoalManager goalManager;
     private Heatup targetHU = new Heatup(5000);
+    private Heatup coverBack = new Heatup(20000); // protect flag for some time
     private GetItems getItemsGoal;
     public volatile UnrealId whoNeedsMe;
     public volatile UnrealId helper;
@@ -123,8 +128,8 @@ public class MyAlterEgo extends UT2004BotTCController {
      */
     @Override
     public void prepareBot(UT2004Bot bot) {
-        tokenCounter = getBotParams().getOrder();
-        name = "Bot "+tokenCounter;
+        botID = getBotParams().getOrder();
+        name = "Bot "+botID;
     }
 
     /**
@@ -208,6 +213,30 @@ public class MyAlterEgo extends UT2004BotTCController {
         log.log(Level.INFO, "VISIBILITY: {0}", visibility.isInitialized());
         log.log(Level.INFO, "NAVMESH: {0}", navMeshModule.isInitialized());
         log.log(Level.INFO, "GEOMETRY: {0}", levelGeometryModule.isInitialized());
+        
+        if (navBuilder.isMapName("CTF-Citadel")) {
+            invSpots = new ArrayList<NavPoint>(4);
+            snipSpots = new ArrayList<NavPoint>(2);
+            if (info.getTeam() == 0) {
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot184"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot182"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot156"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot183"));
+
+                snipSpots.add(navPoints.getNavPoint("CTF-Citadel.AIMarker24"));
+                snipSpots.add(navPoints.getNavPoint("CTF-Citadel.AIMarker34"));
+            } else if (info.getTeam() == 1) {
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot217"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot215"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot160"));
+                invSpots.add(navPoints.getNavPoint("CTF-Citadel.InventorySpot216"));
+
+                snipSpots.add(navPoints.getNavPoint("CTF-Citadel.AIMarker25"));
+                snipSpots.add(navPoints.getNavPoint("CTF-Citadel.AIMarker35"));
+            }
+        } else if (navBuilder.isMapName("CTF-BP2-Concentrate")) {
+            throw new UnsupportedOperationException("NeznĂˇmĂˇ mapa");
+        } else throw new UnsupportedOperationException("NeznĂˇmĂˇ mapa");
     }
 
     /**
@@ -236,6 +265,10 @@ public class MyAlterEgo extends UT2004BotTCController {
      */
     @Override
     public void botKilled(BotKilled event) {
+        if (helper != null) {
+            tcClient.sendToBot(helper, new TCIamOK(info.getId()));
+            helper = null;
+        }
         reset();
     }
 
@@ -253,6 +286,12 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 */
     // TEAMCOM
+    @EventListener(eventClass = TCCoverBack.class)
+    public void coverBack(TCCoverBack seen) {
+        if (coverBack.isCool())
+            coverBack.heat();
+    }
+    
     @EventListener(eventClass = TCSupportMe.class)
     public void supportRequest(TCSupportMe seen) {
         whoNeedsMe = seen.player;
@@ -401,8 +440,8 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     public void callHelp() {
         Location myPos = info.getLocation();
-        Player pl = DistanceUtils.getNearest(players.getFriends().values(), info.getLocation());
-        if (pl == null || (whoNeedsMe != null && whoNeedsMe.equals(pl.getId())))
+        Player pl = DistanceUtils.getNearest(players.getFriends().values(), myPos);
+        if (pl == null || (whoNeedsMe != null && whoNeedsMe.equals(pl.getId())) || pl.equals(ctf.getEnemyFlag().getHolder()))
             return;
         if (helper != null && myPos.getDistance(pl.getLocation()) < myPos.getDistance(players.getPlayer(helper).getLocation()))
             dismissHelp();
@@ -417,6 +456,13 @@ public class MyAlterEgo extends UT2004BotTCController {
             tcClient.sendToBot(helper, new TCIamOK(info.getId()));
             helper = null;
         }
+    }
+
+    public void setBackup() {
+        if (players.getFriends().size() <= 2)
+            return;
+        Player pl = MyCollections.getRandom(players.getFriends().values());
+        tcClient.sendToBot(pl.getId(), new TCCoverBack());
     }
 
     private class CoverMapView implements IPFMapView<NavPoint> {
@@ -480,7 +526,7 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateCoverPath(target);
+        if (!sniping) navigateCoverPath(target);
 
         return true;
     }
@@ -491,7 +537,7 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateCoverPath(nmNav.getNearestNavPoint(target));
+        if (!sniping) navigateCoverPath(nmNav.getNearestNavPoint(target));
 
         return true;
     }
@@ -505,7 +551,7 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateStandard(target);
+        if (!sniping) navigateStandard(target);
 
         return true;
     }
@@ -515,24 +561,30 @@ public class MyAlterEgo extends UT2004BotTCController {
             return false;
         }
 
-        navigateStandard(nmNav.getNearestNavPoint(target));
+        if (!sniping) navigateStandard(nmNav.getNearestNavPoint(target));
 
         return true;
     }
 
-    public boolean goForSniper() {
-        NavPoint t1 = navPoints.getNavPoint("CTF-Citadel.Teleporter1");
-        NavPoint t2 = navPoints.getNavPoint("CTF-Citadel.Teleporter3");
+    private Heatup placeHU = new Heatup(7000);
+    
+    public void goForSniper() {
+        sniping = true;
 
-        if (fwMap.getDistance(info.getNearestNavPoint(), t1) < fwMap.getDistance(info.getNearestNavPoint(), t2)) {
-            pathTarget = t1;
+        if (placeHU.isCool()) {
+            nmNav.navigate(snipSpots.get(getRandom().nextInt(snipSpots.size())));
+            placeHU.heat();
         } else {
-            pathTarget = t2;
+            nmNav.navigate(invSpots.get(0).getLocation());
+            for (NavPoint p : invSpots) {
+                if (items.isPickable(p.getItemInstance()) && items.isPickupSpawned(p.getItemInstance())) {
+                    if (nmNav.isNavigating())
+                        nmNav.setContinueTo(p.getLocation());
+                    else
+                        nmNav.navigate(p.getLocation());
+                }
+            }
         }
-        nmNav.navigate(navPoints.getNavPoint("CTF-Citadel.Teleporter1"));
-        nmNav.setContinueTo(navPoints.getNavPoint("CTF-Citadel.InventorySpot217"));
-
-        return true;
     }
 
     public boolean holdingOrSupporting() {
@@ -554,12 +606,7 @@ public class MyAlterEgo extends UT2004BotTCController {
 
         Player holder = players.getPlayer(holderId);
 
-        if (holder.getTeam() == info.getTeam()
-                && getInfo().getDistance(holder) < 60d) {
-            return true;
-        }
-
-        return false;
+        return holder.getTeam() == info.getTeam() && getInfo().getDistance(holder) < 60d;
     }
 
     public void updateFight() {
@@ -567,21 +614,32 @@ public class MyAlterEgo extends UT2004BotTCController {
             enemy = (Player) getPlayers().getNearestVisibleEnemy();
         }
 
-        Player nearest_target = players.getNearestVisibleEnemy();
+        Collection<Player> every = players.getVisibleEnemies().values();
+        Player best_target = null;
+        double min = Double.POSITIVE_INFINITY;
+        for (Player p : every) {
+            if (ctf.getEnemyFlag() != null && ctf.getEnemyFlag().getHolder() != null && ctf.getEnemyFlag().getHolder().equals(p.getId())) {
+                best_target = p;
+                break;
+            }
+            if (p.getLocation().getDistance(info.getLocation()) < min) {
+                best_target = p;
+            }
+        }
 
         if (enemy == null) {
-            if (nearest_target == null) {
+            if (best_target == null) {
                 return;
             } else {
-                enemy = nearest_target;
+                enemy = best_target;
             }
         } else {
-            if (nearest_target == null) {
+            if (best_target == null) {
                 return;
-            } else if (nearest_target == enemy) {
+            } else if (best_target == enemy) {
                 targetHU.heat();
             } else if (targetHU.isCool()) {
-                enemy = nearest_target;
+                enemy = best_target;
             }
         }
 
@@ -634,29 +692,28 @@ public class MyAlterEgo extends UT2004BotTCController {
      */
     @Override
     public void logic() throws PogamutException {
+        // we are more important ;)
+        if (ctf.getOurFlag() != null && ctf.getOurFlag().getHolder() != null && ctf.getOurFlag().getHolder().equals(info.getId()))
+            whoNeedsMe = null;
+        
         goalManager.executeBestGoal();
 
-//        if (tokenCounter == 0) {
-//            tcClient.sendToBot(nejbližší k vlajce, TCGetOurFlag);
-//            tcClient.sendToBot(ostatní, TCGetEnemyFlag);
-//        }
-
         // Dodging!!
-//        Collection<IncomingProjectile> projectiles = world.getAll(IncomingProjectile.class).values();
-//        for (IncomingProjectile projectile : projectiles) {
-//            if (projectile.isVisible()) {
-//                double distance = info.getLocation().getDistance(projectile.getLocation());
-//                double timeToTravel = distance / projectile.getSpeed();
-//                Location projectileDirection = new Location(projectile.getLocation().x,
-//                        projectile.getLocation().y,
-//                        projectile.getLocation().z).getNormalized();
-//                Location impactLocation = projectile.getLocation().add(projectileDirection.scale(timeToTravel));
-//                if (timeToTravel < 0.5 && info.getLocation().getDistance(impactLocation) < 300) {
-//                    move.dodge(projectileDirection.cross(new Location(0, 0, 1)), true);
-//                    break;
-//                }
-//            }
-//        }
+        Collection<IncomingProjectile> projectiles = world.getAll(IncomingProjectile.class).values();
+        for (IncomingProjectile projectile : projectiles) {
+            if (projectile.isVisible()) {
+                double distance = info.getLocation().getDistance(projectile.getLocation());
+                double timeToTravel = distance / projectile.getSpeed();
+                Location projectileDirection = new Location(projectile.getLocation().x,
+                        projectile.getLocation().y,
+                        projectile.getLocation().z).getNormalized();
+                Location impactLocation = projectile.getLocation().add(projectileDirection.scale(timeToTravel));
+                if (timeToTravel < 0.5 && info.getLocation().getDistance(impactLocation) < 300) {
+                    move.dodge(projectileDirection.cross(new Location(0, 0, 1)), true);
+                    break;
+                }
+            }
+        }
     }
 
     public NavPoint getOurFlagBase() {
@@ -673,10 +730,6 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     public FlagInfo getEnemyFlag() {
         return ctf.getEnemyFlag();
-    }
-    
-    public FloydWarshallMap getfwMap() {
-        return fwMap;
     }
 
     public Player getEnemy() {
@@ -712,6 +765,14 @@ public class MyAlterEgo extends UT2004BotTCController {
         return isDangerous;
     }
 
+    public boolean isCoveringBack() {
+        return coverBack.isHot();
+    }
+
+    public void setFocus(ILocated loc) {
+        nmNav.setFocus(loc);
+    }
+
     /**
      * Resets the state of the Hunter.
      */
@@ -720,6 +781,9 @@ public class MyAlterEgo extends UT2004BotTCController {
         pathTarget = null;
         nmNav.stopNavigation();
         shoot.stopShooting();
+        nmNav.setFocus(null);
+        if (coverBack.isCool())
+            sniping = false;
     }
 
     /**
