@@ -52,8 +52,8 @@ public class GetEnemyFlag extends Goal {
 
         if (bot.isDangerous(bot.getInfo().getLocation()))
             bot.callHelp();
-        bot.updateFight();
         bot.setBackup();
+        bot.updateFight();
     }
 
     @Override
@@ -61,6 +61,9 @@ public class GetEnemyFlag extends Goal {
         if (bot.getEnemyFlag() != null
                 && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
             return 50d;
+        } else if (bot.getEnemyFlag() != null && bot.getEnemyFlag().getLocation() != null
+                && bot.getInfo().atLocation(bot.getEnemyFlag().getLocation(), 100d)) {
+            return 35d;
         } else {
             return 10d;
         }

@@ -16,20 +16,18 @@
  */
 package kiv.janecekz.behavior;
 
-import cz.cuni.amis.pogamut.base3d.worldview.object.ILocated;
 import cz.cuni.amis.pogamut.base3d.worldview.object.Location;
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Player;
-import cz.cuni.amis.utils.Heatup;
 import kiv.janecekz.Goal;
 import kiv.janecekz.MyAlterEgo;
 
 public class GetOurFlag extends Goal {
-
+    private boolean failed = false;
     private static final double CAPTURE_SUPPORT_DISTANCE = 200;
     protected Player enemy = null;
-    Location flagLocation;
-    Heatup onPlace = new Heatup(4000);
+
+    public Location flagLocation;
 
     public GetOurFlag(MyAlterEgo bot) {
         super(bot);
@@ -37,6 +35,11 @@ public class GetOurFlag extends Goal {
 
     @Override
     public void perform() {
+        if (failed) {
+            bot.goTo(bot.getEnemyFlagBase());
+            return;
+        }
+
         if (bot.getOurFlag() != null) {
             if (bot.getOurFlag().getLocation() != null) {
                 flagLocation = bot.getOurFlag().getLocation();
@@ -53,9 +56,7 @@ public class GetOurFlag extends Goal {
                         return;
                     }
                 } else {
-                    if (bot.getInfo().getLocation().equals(flagLocation)) {
-                        bot.goTo(bot.getEnemyFlagBase());
-                    } else if (bot.getOurFlag().getState().equalsIgnoreCase("home")) {
+                    if (bot.getOurFlag().getState().equalsIgnoreCase("home")) {
                         bot.goForSniper();
                     } else {
                         bot.goTo(flagLocation);
@@ -83,16 +84,13 @@ public class GetOurFlag extends Goal {
             if (holderId != null) {
                 Player holder = bot.getPlayers().getFriends().get(holderId);
 
-                if (holder != null && bot.getPlayers().getFriends().size() > 1) {
-                    if (holderId.equals(bot.getInfo().getId())
-                            || holder.getLocation().getDistance(
-                                    bot.getInfo().getLocation())
-                            < CAPTURE_SUPPORT_DISTANCE) {
-                        return 0d;
-                    }
+                if (holder != null && holderId.equals(bot.getInfo().getId())) {
+                    return 0d;
                 } else {
                     return 70d;
                 }
+            } else if (bot.getEnemyFlag().getLocation() != null && bot.getEnemyFlag().getLocation().equals(bot.getInfo().getLocation(), 200d)) {
+                return 0d;
             } else {
                 return 70d;
             }
@@ -102,7 +100,7 @@ public class GetOurFlag extends Goal {
 
     @Override
     public boolean hasFailed() {
-        return false;
+        return failed;
     }
 
     @Override
@@ -112,9 +110,14 @@ public class GetOurFlag extends Goal {
 
     @Override
     public void abandon() {
+        failed = false;
         bot.reset();
     }
 
+    public void fail() {
+        failed = true;
+    }
+    
     @Override
     public String toString() {
         return "GetOurFlag";

@@ -15,13 +15,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package kiv.janecekz;
+package kiv.janecekz.teamcomm;
 
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.mina.messages.TCMessageData;
 import cz.cuni.amis.utils.token.Tokens;
 
-class TCSupportMe extends TCMessageData {
+public class TCSupportMe extends TCMessageData {
     public final UnrealId player;
 
     public TCSupportMe(UnrealId player) {

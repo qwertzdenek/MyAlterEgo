@@ -15,12 +15,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package kiv.janecekz;
+package kiv.janecekz.teamcomm;
 
 import cz.cuni.amis.pogamut.ut2004.teamcomm.mina.messages.TCMessageData;
 import cz.cuni.amis.utils.token.Tokens;
 
-class TCCoverBack extends TCMessageData {
+public class TCCoverBack extends TCMessageData {
     public TCCoverBack() {
         super(Tokens.get("TCCoverBack"));
     }

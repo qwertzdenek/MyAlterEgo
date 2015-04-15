@@ -17,6 +17,11 @@
 
 package kiv.janecekz;
 
+import kiv.janecekz.teamcomm.TCIamOK;
+import kiv.janecekz.teamcomm.TCPlayerSeen;
+import kiv.janecekz.teamcomm.TCCoverBack;
+import kiv.janecekz.teamcomm.TCSupportMe;
+import kiv.janecekz.teamcomm.TCFlagMissing;
 import kiv.janecekz.behavior.GetOurFlag;
 import kiv.janecekz.behavior.GetItems;
 import kiv.janecekz.behavior.GetHealth;
@@ -39,7 +44,6 @@ import cz.cuni.amis.pogamut.base3d.worldview.object.Location;
 import cz.cuni.amis.pogamut.base3d.worldview.object.event.WorldObjectAppearedEvent;
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.agent.module.utils.TabooSet;
-import cz.cuni.amis.pogamut.ut2004.agent.navigation.floydwarshall.FloydWarshallMap;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.navmesh.pathfollowing.UT2004AcceleratedPathExecutor;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004DistanceStuckDetector;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004PositionStuckDetector;
@@ -52,6 +56,7 @@ import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.BotKill
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.ConfigChange;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.FlagInfo;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.GameInfo;
+import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.HearNoise;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.IncomingProjectile;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.InitedMessage;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Item;
@@ -62,14 +67,18 @@ import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Self;
 import cz.cuni.amis.pogamut.ut2004.utils.UT2004BotRunner;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.bot.UT2004BotTCController;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.server.UT2004TCServer;
+import cz.cuni.amis.utils.Cooldown;
 import cz.cuni.amis.utils.Heatup;
 import cz.cuni.amis.utils.collections.MyCollections;
 import cz.cuni.amis.utils.exception.PogamutException;
 import cz.cuni.amis.utils.flag.FlagListener;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedList;
 import java.util.logging.Level;
 import kiv.janecekz.behavior.SupportFriend;
+import kiv.janecekz.teamcomm.FlagHuntingState;
+import kiv.janecekz.teamcomm.TCFlagHunter;
 
 /**
  * My Alter Ego bot :).
@@ -88,26 +97,41 @@ public class MyAlterEgo extends UT2004BotTCController {
     private Player enemy = null;
 
     /**
+     * Path auto fixer watches for navigation failures and if some navigation
+     * link is found to be unwalkable, it removes it from underlying navigation
+     * graph.
+     *
+     * Note that UT2004 navigation graphs are some times VERY stupid or contains
+     * VERY HARD TO FOLLOW links...
+     */
+    //protected UT2004PathAutoFixer autoFixer;
+
+    /**
      * Stores target location.
      */
     private NavPoint pathTarget = null;
     private PrecomputedPathFuture<NavPoint> actualPath;
 
     TabooSet<Item> tabooItems;
-    TabooSet<NavPoint> tabooNavPoints;
 
     private boolean sniping = false;
     private ArrayList<NavPoint> invSpots;
     private ArrayList<NavPoint> snipSpots;
-    
+    private boolean snipingSupported;
+
 //    private UT2004PathAutoFixer autoFixer;
     private GoalManager goalManager;
     private Heatup targetHU = new Heatup(5000);
-    private Heatup coverBack = new Heatup(20000); // protect flag for some time
+    private Heatup coverBack = new Heatup(10000); // protect flag for some time
     private GetItems getItemsGoal;
+    private GetOurFlag getOurFlag;
     public volatile UnrealId whoNeedsMe;
     public volatile UnrealId helper;
+    private Player backupPlayer;
+    private boolean flagHunter = false;
     private String name;
+
+    private int rotUnit = 32767 / 180;
 
     private IGetDistance<ILocated> getDistance = new DistanceUtils.IGetDistance<ILocated>() {
         @Override
@@ -149,7 +173,7 @@ public class MyAlterEgo extends UT2004BotTCController {
      * called.
      *
      * @param gameInfo informaton about the game type
-     * @param config information about configuration
+     * @param currentConfig information about configuration
      * @param init information about configuration
      */
     @Override
@@ -159,16 +183,17 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
 
         tabooItems = new TabooSet<Item>(bot);
-        tabooNavPoints = new TabooSet<NavPoint>(bot);
 
         goalManager = new GoalManager(this);
 
         goalManager.addGoal(new GetEnemyFlag(this));
-        goalManager.addGoal(new GetOurFlag(this));
+        goalManager.addGoal(getOurFlag = new GetOurFlag(this));
         goalManager.addGoal(new GetHealth(this));
         goalManager.addGoal(getItemsGoal = new GetItems(this));
         goalManager.addGoal(new CloseInOnEnemy(this));
         goalManager.addGoal(new SupportFriend(this));
+
+        // TODO: add navigation fallback
 
         UT2004AcceleratedPathExecutor accPathExecutor = ((UT2004AcceleratedPathExecutor) nmNav.getPathExecutor());
         accPathExecutor.removeAllStuckDetectors();
@@ -177,8 +202,10 @@ public class MyAlterEgo extends UT2004BotTCController {
         accPathExecutor.addStuckDetector(new AccUT2004PositionStuckDetector(bot));
         accPathExecutor.addStuckDetector(new AccUT2004DistanceStuckDetector(bot));
 
+        //autoFixer = new UT2004PathAutoFixer(bot, accPathExecutor, fwMap, aStar, navBuilder);
+
         // listeners
-        nmNav.getPathExecutor().getState().addStrongListener(new FlagListener<IPathExecutorState>() {
+        accPathExecutor.getState().addStrongListener(new FlagListener<IPathExecutorState>() {
             @Override
             public void flagChanged(IPathExecutorState changedValue) {
                 pathExecutorStateChange(changedValue.getState());
@@ -215,6 +242,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         log.log(Level.INFO, "GEOMETRY: {0}", levelGeometryModule.isInitialized());
         
         if (navBuilder.isMapName("CTF-Citadel")) {
+            snipingSupported = true;
             invSpots = new ArrayList<NavPoint>(4);
             snipSpots = new ArrayList<NavPoint>(2);
             if (info.getTeam() == 0) {
@@ -235,8 +263,18 @@ public class MyAlterEgo extends UT2004BotTCController {
                 snipSpots.add(navPoints.getNavPoint("CTF-Citadel.AIMarker35"));
             }
         } else if (navBuilder.isMapName("CTF-BP2-Concentrate")) {
-            throw new UnsupportedOperationException("NeznĂˇmĂˇ mapa");
-        } else throw new UnsupportedOperationException("NeznĂˇmĂˇ mapa");
+            snipingSupported = true;
+            invSpots = new ArrayList<NavPoint>(1);
+            snipSpots = new ArrayList<NavPoint>(1);
+
+            if (info.getTeam() == 0) {
+                invSpots.add(navPoints.getNavPoint("CTF-BP2-Concentrate.InventorySpot6"));
+                snipSpots.add(navPoints.getNavPoint("CTF-BP2-Concentrate.AssaultPath12"));
+            } else if (info.getTeam() == 1) {
+                invSpots.add(navPoints.getNavPoint("CTF-BP2-Concentrate.InventorySpot10"));
+                snipSpots.add(navPoints.getNavPoint("CTF-BP2-Concentrate.AssaultPath5"));
+            }
+        }
     }
 
     /**
@@ -276,9 +314,13 @@ public class MyAlterEgo extends UT2004BotTCController {
     @ObjectClassEventListener(eventClass = WorldObjectAppearedEvent.class, objectClass = Player.class)
     public void playerAppeared(WorldObjectAppearedEvent<Player> event) {
         if (tcClient.isConnected())
-            tcClient.sendToTeam(new TCPlayerSeen(this, event.getObject().getId(), event.getObject().getLocation()));
+            tcClient.sendToTeam(new TCPlayerSeen(this, event.getObject().getId(), event.getObject().getLocation(), event.getObject().getTeam()));
     }
-
+    
+    @EventListener(eventClass = HearNoise.class)
+    public void hearNoise(HearNoise event) {
+        if (sniping) move.turnHorizontal((int) (event.getRotation().roll / rotUnit));
+    }
 /*
     @ObjectClassEventListener(eventClass = WorldObjectAppearedEvent.class, objectClass = Item.class)
     public void itemAppeared(WorldObjectAppearedEvent<Item> event) {
@@ -286,6 +328,16 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 */
     // TEAMCOM
+    @EventListener(eventClass = TCFlagHunter.class)
+    public void flagHunter(TCFlagHunter seen) {
+        flagHunter = seen.state == FlagHuntingState.PROCESSING;
+    }
+
+    @EventListener(eventClass = TCFlagMissing.class)
+    public void flagMissing(TCFlagMissing seen) {
+        getOurFlag.fail();
+    }
+
     @EventListener(eventClass = TCCoverBack.class)
     public void coverBack(TCCoverBack seen) {
         if (coverBack.isCool())
@@ -299,41 +351,21 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     @EventListener(eventClass = TCIamOK.class)
     public void abbadonSupport(TCIamOK seen) {
-        if (whoNeedsMe != null && whoNeedsMe.equals(seen.player)) {
-            whoNeedsMe = null;
-        }
+        whoNeedsMe = null;
     }
 
     @EventListener(eventClass = TCPlayerSeen.class)
     public void playerSeen(TCPlayerSeen seen) {
         Player player = players.getPlayer(seen.playerId);
-        if (player == null) {
-            return;
-        }
-        if (player.isVisible()) {
+
+        if (player != null && player.isVisible()) {
             return;
         }
 
         // copy zprava PlayerMessage do playerUpdate
         PlayerMessage playerUpdate = new PlayerMessage(
-                seen.playerId,
-                player.getJmx(),
-                player.getName(),
-                player.isSpectator(),
-                player.getAction(),
-                false,
-                player.getRotation(),
-                seen.location,
-                player.getVelocity(),
-                player.getTeam(),
-                player.getWeapon(),
-                player.isCrouched(),
-                player.getFiring(),
-                player.getEmotLeft(),
-                player.getEmotCenter(),
-                player.getEmotRight(),
-                player.getBubble(),
-                player.getAnim());
+                seen.playerId, null, "unknown", false, null, false, null, seen.location,
+                null, seen.team, null, false, 0, "None", "None", "None", "None", "None");
 
         world.notifyImmediately(playerUpdate);
     }
@@ -395,35 +427,20 @@ public class MyAlterEgo extends UT2004BotTCController {
      * @param event
      */
     protected void pathExecutorStateChange(PathExecutorState event) {
-        switch (event) {
-            case PATH_COMPUTATION_FAILED:
-                // if path computation fails to whatever reason, just try another navpoint
-                // taboo bad navpoint for 3 minutes
-                tabooNavPoints.add(pathTarget, 180);
-                break;
-
-            case TARGET_REACHED:
-                tabooNavPoints.add(pathTarget, 20);
-                break;
-
-            case STUCK:
-                // the bot has stuck! ... target nav point is unavailable currently
-                tabooNavPoints.add(pathTarget, 60);
-
-                Item item = getItemsGoal.getItem();
-                if (item != null && pathTarget != null
-                        && item.getLocation().equals(pathTarget.getLocation(), 10d)) {
-                    tabooItems.add(item, 10d);
-                }
-                reset();
-                break;
-
-            case STOPPED:
-                // path execution has stopped
-                pathTarget = null;
-                break;
-            case PATH_COMPUTED:
-                break;
+        Item item = getItemsGoal.getItem();
+        if (event == PathExecutorState.STUCK) {
+            if (item != null && pathTarget != null
+                    && item.getLocation().equals(pathTarget.getLocation(), 10d)) {
+                tabooItems.add(item, 10d);
+            }
+            if (info.getLocation().equals(getOurFlag.flagLocation, 100d)) {
+                tcClient.sendToTeam(new TCFlagMissing());
+            }
+            reset();
+        } else if (event == PathExecutorState.TARGET_REACHED) {
+            if (item != null && pathTarget != null) {
+                tabooItems.add(item, 10d);
+            }
         }
     }
 
@@ -452,21 +469,32 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public void dismissHelp() {
-        if (helper != null && tcClient.isConnected() && tcClient.isConnected(helper)) {
-            tcClient.sendToBot(helper, new TCIamOK(info.getId()));
+        if (tcClient.isConnected() && tcClient.isConnected(helper)) {
+            tcClient.sendToTeam(new TCIamOK(info.getId()));
             helper = null;
+            
+            backupPlayer = null;
+            tcClient.sendToTeam(new TCFlagHunter(FlagHuntingState.DONE));
         }
     }
 
     public void setBackup() {
         if (players.getFriends().size() <= 2)
             return;
-        Player pl = MyCollections.getRandom(players.getFriends().values());
-        tcClient.sendToBot(pl.getId(), new TCCoverBack());
+
+        if (!flagHunter) {
+            if (backupPlayer == null) {
+                Collection<Player> col = new LinkedList<Player>(players.getFriends().values());
+                col.remove(players.getPlayer(info.getId()));
+                backupPlayer = MyCollections.getRandom(col);
+                tcClient.sendToBot(backupPlayer.getId(), new TCCoverBack());
+            }
+
+            tcClient.sendToTeamOthers(new TCFlagHunter(FlagHuntingState.PROCESSING));
+        }
     }
 
     private class CoverMapView implements IPFMapView<NavPoint> {
-
         @Override
         public Collection<NavPoint> getExtraNeighbors(NavPoint node, Collection<NavPoint> mapNeighbors) {
             return null;
@@ -500,7 +528,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     private void navigateCoverPath(NavPoint target) { // TODO: update when new enemy seen
         if (pathTarget == null || !target.equals(pathTarget)) {
             pathTarget = target;
-            actualPath = generateCoverPath(target);
+            actualPath = generateCoverPath(pathTarget);
             nmNav.stopNavigation();
             if (actualPath == null) {
                 navigateStandard(target);
@@ -547,43 +575,49 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public boolean goTo(NavPoint target) {
-        if (target == null) {
+        if (pathTarget == null || !target.equals(pathTarget)) {
+            pathTarget = target;
+
+            if (!sniping) navigateStandard(pathTarget);
+
+            return true;
+        } else
             return false;
-        }
-
-        if (!sniping) navigateStandard(target);
-
-        return true;
     }
 
     public boolean goTo(ILocated target) {
-        if (target == null) {
+        if (pathTarget == null || !target.equals(pathTarget)) {
+            pathTarget = nmNav.getNearestNavPoint(target);
+
+            if (!sniping) navigateStandard(pathTarget);
+
+            return true;
+        } else
             return false;
-        }
-
-        if (!sniping) navigateStandard(nmNav.getNearestNavPoint(target));
-
-        return true;
     }
 
-    private Heatup placeHU = new Heatup(7000);
+    private final Cooldown place = new Cooldown(7000);
     
     public void goForSniper() {
+        if (!game.getMapName().equals("CTF-BP2-Concentrate") && !game.getMapName().equals("CTF-Citadel"))
+            return;
+
+        if (!snipingSupported)
+            return;
+
         sniping = true;
 
-        if (placeHU.isCool()) {
-            nmNav.navigate(snipSpots.get(getRandom().nextInt(snipSpots.size())));
-            placeHU.heat();
-        } else {
+        if (place.isCool()) {
             nmNav.navigate(invSpots.get(0).getLocation());
-            for (NavPoint p : invSpots) {
+            for (int i = 1; i < invSpots.size(); i++) {
+                NavPoint p = invSpots.get(i);
                 if (items.isPickable(p.getItemInstance()) && items.isPickupSpawned(p.getItemInstance())) {
-                    if (nmNav.isNavigating())
-                        nmNav.setContinueTo(p.getLocation());
-                    else
-                        nmNav.navigate(p.getLocation());
+                    nmNav.setContinueTo(p.getLocation());
                 }
             }
+            nmNav.setContinueTo(snipSpots.get(getRandom().nextInt(snipSpots.size())));
+            nmNav.setFocus(null);
+            place.use();
         }
     }
 
@@ -648,14 +682,10 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     public void updateFight(Player newEnemy) {
         if (newEnemy == null || !newEnemy.isVisible()) {
-            newEnemy = (Player) getPlayers().getNearestVisibleEnemy();
+            updateFight();
         }
 
-        if (newEnemy == null) {
-            return;
-        } else {
-            enemy = newEnemy;
-        }
+        enemy = newEnemy;
 
         shoot();
     }
@@ -769,6 +799,10 @@ public class MyAlterEgo extends UT2004BotTCController {
         return coverBack.isHot();
     }
 
+    public boolean isSniping() {
+        return sniping;
+    }
+
     public void setFocus(ILocated loc) {
         nmNav.setFocus(loc);
     }
@@ -782,8 +816,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         nmNav.stopNavigation();
         shoot.stopShooting();
         nmNav.setFocus(null);
-        if (coverBack.isCool())
-            sniping = false;
+        sniping = false;
     }
 
     /**

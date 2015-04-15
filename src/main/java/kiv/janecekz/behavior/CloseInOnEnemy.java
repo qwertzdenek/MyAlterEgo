@@ -23,8 +23,6 @@ import kiv.janecekz.MyAlterEgo;
 
 public class CloseInOnEnemy extends Goal {
 
-    protected boolean runningToPlayer = false;
-
     public CloseInOnEnemy(MyAlterEgo bot) {
         super(bot);
     }
@@ -35,11 +33,10 @@ public class CloseInOnEnemy extends Goal {
 
         Player enemy = bot.getEnemy();
         int decentDistance = Math.round(bot.getRandom().nextFloat() * 250) + 200;
-        if (enemy != null && bot.getInfo().getDistance(enemy) > decentDistance
-                && !runningToPlayer) {
-
+        if (enemy != null && bot.getInfo().getDistance(enemy) > decentDistance) {
             bot.goTo(enemy.getLocation());
-            runningToPlayer = true;
+        } else {
+            bot.getNMNav().stopNavigation();
         }
 
         bot.callHelp();
@@ -69,7 +66,6 @@ public class CloseInOnEnemy extends Goal {
 
     @Override
     public void abandon() {
-        runningToPlayer = false;
         bot.dismissHelp();
         bot.reset();
     }

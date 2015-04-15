@@ -16,19 +16,19 @@
  */
 package kiv.janecekz.behavior;
 
-import cz.cuni.amis.pogamut.ut2004.communication.messages.ItemType;
 import cz.cuni.amis.pogamut.ut2004.communication.messages.UT2004ItemType;
-import java.util.LinkedList;
 
 import cz.cuni.amis.pogamut.ut2004.communication.messages.gbinfomessages.Item;
 import cz.cuni.amis.utils.IFilter;
+import cz.cuni.amis.utils.collections.MyCollections;
+import java.util.List;
 import kiv.janecekz.Goal;
 import kiv.janecekz.MyAlterEgo;
 
 public class GetItems extends Goal {
 
     protected Item item;
-    protected LinkedList<Item> itemsToRunAround;
+    protected List<Item> itemsToRunAround;
 
     public GetItems(MyAlterEgo bot) {
         super(bot);
@@ -39,11 +39,13 @@ public class GetItems extends Goal {
     public void perform() {
         bot.updateFight();
 
+        itemsToRunAround = availableItems();
+
         if (item != null && bot.getInfo().atLocation(item)) {
             bot.getTaboo().add(item, 10);
             item = null;
-        } else if (item == null || !item.getNavPoint().isItemSpawned()) {
-            item = oneItem();
+        } else if (item == null) {
+            item = MyCollections.getRandom(itemsToRunAround);
 
             bot.goTo(item.getLocation());
         }
@@ -51,9 +53,12 @@ public class GetItems extends Goal {
 
     @Override
     public double getPriority() {
-        itemsToRunAround = filterItems(UT2004ItemType.ADRENALINE_PACK);
+        itemsToRunAround = availableItems();
 
-        return 6 + itemsToRunAround.size() + (bot.ammoOK() ? 0 : 10);
+        if (itemsToRunAround.isEmpty())
+            return 0;
+        else
+            return 6 + itemsToRunAround.size() + (bot.ammoOK() ? 0 : 10);
     }
 
     @Override
@@ -76,25 +81,13 @@ public class GetItems extends Goal {
         return item;
     }
 
-    public Item oneItem() {
-        return bot.getFwMap().getNearestFilteredItem(bot.getItems().getAllItems().values(), bot.getInfo().getNearestNavPoint(), new IFilter<Item>() {
+    public List<Item> availableItems() {
+        return MyCollections.getFiltered(bot.getItems().getAllItems().values(), new IFilter<Item>() {
             @Override
             public boolean isAccepted(Item object) {
-                return !bot.getTaboo().contains(object) && bot.getItems().isPickupSpawned(object) && bot.getItems().isPickable(object) && !object.getType().equals(UT2004ItemType.ADRENALINE_PACK);
+                return !bot.getTaboo().contains(object) && bot.getItems().isPickupSpawned(object) && bot.getItems().isPickable(object) && object.isVisible() && !object.getType().equals(UT2004ItemType.ADRENALINE_PACK);
             }
         });
-    }
-
-    public LinkedList<Item> filterItems(ItemType type) {
-        LinkedList<Item> res = new LinkedList<Item>();
-
-        for (Item i : res) {
-            if (!i.getType().equals(type)) {
-                res.add(i);
-            }
-        }
-
-        return res;
     }
 
     @Override

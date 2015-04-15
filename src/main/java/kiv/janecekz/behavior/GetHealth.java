@@ -16,6 +16,7 @@
  */
 package kiv.janecekz.behavior;
 
+import cz.cuni.amis.pogamut.base.utils.math.DistanceUtils;
 import java.util.Set;
 
 import cz.cuni.amis.pogamut.ut2004.communication.messages.ItemType.Category;
@@ -44,19 +45,15 @@ public class GetHealth extends Goal {
                 bot.getItems().getSpawnedItems(
                         Category.HEALTH).values());
 
-        double min_distance = Double.MAX_VALUE;
-        Item winner = null;
+        if (health != null && bot.getInfo().atLocation(health)) {
+            bot.getTaboo().add(health, 10);
+            health = null;
+        } else if (health == null) {
+            health = DistanceUtils.getNearest(healths, bot.getInfo());
 
-        for (Item item : healths) { // FIXME: bots still can stuck ????
-            double dist = bot.getFwMap().getDistance(bot.getInfo().getNearestNavPoint(), item.getNavPoint());
-            if (dist < min_distance) {
-                min_distance = dist;
-                winner = item;
-            }
+            if (health != null) bot.goCovered(health.getLocation());
+            else bot.goTo(bot.getOurFlagBase());
         }
-        health = winner;
-        if (health != null) bot.goCovered(health.getLocation());
-        else bot.goCovered(bot.getOurFlagBase());
     }
 
     @Override
