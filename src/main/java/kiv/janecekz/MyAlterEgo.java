@@ -44,6 +44,7 @@ import cz.cuni.amis.pogamut.base3d.worldview.object.Location;
 import cz.cuni.amis.pogamut.base3d.worldview.object.event.WorldObjectAppearedEvent;
 import cz.cuni.amis.pogamut.unreal.communication.messages.UnrealId;
 import cz.cuni.amis.pogamut.ut2004.agent.module.utils.TabooSet;
+import cz.cuni.amis.pogamut.ut2004.agent.navigation.UT2004PathAutoFixer;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.navmesh.pathfollowing.UT2004AcceleratedPathExecutor;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004DistanceStuckDetector;
 import cz.cuni.amis.pogamut.ut2004.agent.navigation.stuckdetector.AccUT2004PositionStuckDetector;
@@ -119,10 +120,11 @@ public class MyAlterEgo extends UT2004BotTCController {
     private ArrayList<NavPoint> snipSpots;
     private boolean snipingSupported;
 
-//    private UT2004PathAutoFixer autoFixer;
+    private UT2004PathAutoFixer autoFixer;
     private GoalManager goalManager;
     private Heatup targetHU = new Heatup(5000);
-    private Heatup coverBack = new Heatup(10000); // protect flag for some time
+    private Heatup coverBack = new Heatup(7000); // protect flag for some time
+    private Cooldown coverBackCD = new Cooldown(12000); // if we want to coverBack
     private GetItems getItemsGoal;
     private GetOurFlag getOurFlag;
     public volatile UnrealId whoNeedsMe;
@@ -181,6 +183,35 @@ public class MyAlterEgo extends UT2004BotTCController {
         if (navBuilder.isMapName("DM-1on1-Albatross")) {
             navBuilder.removeEdge("JumpSpot8", "PathNode88");
         }
+        if (navBuilder.isMapName("CTF-BP2-Concentrate")) {
+            navBuilder.removeEdge("PathNode39", "JumpSpot3");
+            navBuilder.removeEdge("PathNode75", "JumpSpot2");
+            
+            navBuilder.removeEdge("PathNode74", "JumpSpot2");
+            navBuilder.removeEdge("PathNode81", "JumpSpot2");
+            navBuilder.removeEdge("PathNode2", "PathNode76");
+            navBuilder.removeEdge("InventorySpot1", "AIMarker6");
+            navBuilder.removeEdge("InventorySpot55", "PathNode44");
+            navBuilder.removeEdge("PathNode0", "JumpSpot3");
+            navBuilder.removeEdgesBetween("PathNode44", "JumpSpot3");
+            navBuilder.removeEdge("InventorySpot9", "PathNode43");
+            
+            navBuilder.removeEdge("PathNode0", "PathNode39");
+            navBuilder.removeEdge("PathNode0", "JumpSpot0");
+            navBuilder.removeEdge("PathNode0", "xBlueFlagBase0");
+            
+            navBuilder.removeEdge("PathNode44", "PathNode39");
+            navBuilder.removeEdge("PathNode44", "JumpSpot0");
+            navBuilder.removeEdge("PathNode44", "xBlueFlagBase0");
+            
+            navBuilder.removeEdge("PathNode74", "PathNode75");
+            navBuilder.removeEdge("PathNode74", "JumpSpot1");
+            navBuilder.removeEdge("PathNode74", "xRedFlagBase1");
+            
+            navBuilder.removeEdge("PathNode81", "PathNode75");
+            navBuilder.removeEdge("PathNode81", "JumpSpot1");
+            navBuilder.removeEdge("PathNode81", "xRedFlagBase1");
+        }
 
         tabooItems = new TabooSet<Item>(bot);
 
@@ -202,7 +233,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         accPathExecutor.addStuckDetector(new AccUT2004PositionStuckDetector(bot));
         accPathExecutor.addStuckDetector(new AccUT2004DistanceStuckDetector(bot));
 
-        //autoFixer = new UT2004PathAutoFixer(bot, accPathExecutor, fwMap, aStar, navBuilder);
+        autoFixer = new UT2004PathAutoFixer(bot, accPathExecutor, fwMap, aStar, navBuilder);
 
         // listeners
         accPathExecutor.getState().addStrongListener(new FlagListener<IPathExecutorState>() {
@@ -340,8 +371,10 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     @EventListener(eventClass = TCCoverBack.class)
     public void coverBack(TCCoverBack seen) {
-        if (coverBack.isCool())
+        if (coverBackCD.isCool()) {
             coverBack.heat();
+            coverBackCD.use();
+        }
     }
     
     @EventListener(eventClass = TCSupportMe.class)
@@ -829,9 +862,6 @@ public class MyAlterEgo extends UT2004BotTCController {
         UT2004TCServer.startTCServer();
 
         new UT2004BotRunner<UT2004Bot, UT2004BotParameters>(MyAlterEgo.class, "TeamCTF").setMain(true).setHost("localhost").setLogLevel(Level.WARNING).startAgents(
-                new MyAlterEgoParams().setTeam(0).setOrder(0),
-                new MyAlterEgoParams().setTeam(0).setOrder(1),
-                new MyAlterEgoParams().setTeam(0).setOrder(2),
                 new MyAlterEgoParams().setTeam(1).setOrder(0),
                 new MyAlterEgoParams().setTeam(1).setOrder(1),
                 new MyAlterEgoParams().setTeam(1).setOrder(2)

@@ -62,8 +62,8 @@ public class GetEnemyFlag extends Goal {
                 && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
             return 50d;
         } else if (bot.getEnemyFlag() != null && bot.getEnemyFlag().getLocation() != null
-                && bot.getInfo().atLocation(bot.getEnemyFlag().getLocation(), 100d)) {
-            return 35d;
+                && bot.getInfo().atLocation(bot.getEnemyFlag().getLocation(), 300d)) {
+            return 40d;
         } else {
             return 10d;
         }
