@@ -23,11 +23,7 @@ import kiv.janecekz.Goal;
 import kiv.janecekz.MyAlterEgo;
 
 public class GetOurFlag extends Goal {
-    private boolean failed = false;
-    private static final double CAPTURE_SUPPORT_DISTANCE = 200;
     protected Player enemy = null;
-
-    public Location flagLocation;
 
     public GetOurFlag(MyAlterEgo bot) {
         super(bot);
@@ -35,14 +31,11 @@ public class GetOurFlag extends Goal {
 
     @Override
     public void perform() {
-        if (failed) {
-            bot.goTo(bot.getEnemyFlagBase());
-            return;
-        }
+        Location flagLocation = null;
 
         if (bot.getOurFlag() != null) {
-            if (bot.getOurFlag().getLocation() != null) {
-                flagLocation = bot.getOurFlag().getLocation();
+            if (bot.getOurFlagLocation() != null) {
+                flagLocation = bot.getOurFlagLocation();
             }
 
             if (flagLocation != null) {
@@ -89,8 +82,6 @@ public class GetOurFlag extends Goal {
                 } else {
                     return 70d;
                 }
-            } else if (bot.getEnemyFlag().getLocation() != null && bot.getEnemyFlag().getLocation().equals(bot.getInfo().getLocation(), 200d)) {
-                return 0d;
             } else {
                 return 70d;
             }
@@ -100,7 +91,7 @@ public class GetOurFlag extends Goal {
 
     @Override
     public boolean hasFailed() {
-        return failed;
+        return false;
     }
 
     @Override
@@ -110,14 +101,9 @@ public class GetOurFlag extends Goal {
 
     @Override
     public void abandon() {
-        failed = false;
         bot.reset();
     }
 
-    public void fail() {
-        failed = true;
-    }
-    
     @Override
     public String toString() {
         return "GetOurFlag";

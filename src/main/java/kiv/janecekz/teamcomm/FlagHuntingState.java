@@ -21,5 +21,16 @@ package kiv.janecekz.teamcomm;
  * @author zdenek
  */
 public enum FlagHuntingState {
-    PROCESSING, DONE
+    /**
+     * enemy flag or our flag has new position
+     */
+    NEW_FP,
+    /**
+     * I scored with the flag. Empty your enemy flag position!
+     */
+    DONE,
+    /**
+     * Our flag pos invalid.
+     */
+    INVALID
 }

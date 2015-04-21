@@ -20,8 +20,8 @@ package kiv.janecekz.teamcomm;
 import cz.cuni.amis.pogamut.ut2004.teamcomm.mina.messages.TCMessageData;
 import cz.cuni.amis.utils.token.Tokens;
 
-public class TCFlagMissing extends TCMessageData {
-    public TCFlagMissing() {
-        super(Tokens.get("TCFlagMissing"));
+public class TCHuntFlag extends TCMessageData {
+    public TCHuntFlag() {
+        super(Tokens.get("TCHuntFlag"));
     }
 }

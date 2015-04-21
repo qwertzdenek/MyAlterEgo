@@ -38,8 +38,6 @@ public class CloseInOnEnemy extends Goal {
         } else {
             bot.getNMNav().stopNavigation();
         }
-
-        bot.callHelp();
     }
 
     @Override

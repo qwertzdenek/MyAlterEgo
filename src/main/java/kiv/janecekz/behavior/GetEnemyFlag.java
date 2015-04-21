@@ -38,7 +38,7 @@ public class GetEnemyFlag extends Goal {
                 if (bot.getCTF().isEnemyFlagHome()) {
                     bot.goCovered(bot.getEnemyFlagBase().getLocation());
                 } else {
-                    Location target = bot.getEnemyFlag().getLocation();
+                    Location target = bot.getEnemyFlagLocation();
                     if (target == null) {
                         target = bot.getEnemyFlagBase().getLocation();
                     }
@@ -50,22 +50,20 @@ public class GetEnemyFlag extends Goal {
             bot.goCovered(bot.getEnemyFlagBase().getLocation());
         }
 
-        if (bot.isDangerous(bot.getInfo().getLocation()))
-            bot.callHelp();
         bot.setBackup();
+        if (bot.isDangerous(bot.getInfo().getLocation())) {
+            bot.callHelp();
+        }
+
         bot.updateFight();
     }
 
     @Override
     public double getPriority() {
-        if (bot.getEnemyFlag() != null
-                && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
+        if (bot.getEnemyFlag() != null && bot.getInfo().getId().equals(bot.getEnemyFlag().getHolder())) {
             return 50d;
-        } else if (bot.getEnemyFlag() != null && bot.getEnemyFlag().getLocation() != null
-                && bot.getInfo().atLocation(bot.getEnemyFlag().getLocation(), 300d)) {
-            return 40d;
         } else {
-            return 10d;
+            return 20d;
         }
     }
 

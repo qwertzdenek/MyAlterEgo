@@ -22,7 +22,7 @@ import java.util.LinkedList;
 public class GoalManager {
     private final LinkedList<IGoal> goals = new LinkedList<IGoal>();
     private IGoal currentGoal = null;
-    private MyAlterEgo bot;
+    private final MyAlterEgo bot;
 
     public GoalManager(MyAlterEgo bot) {
         this.bot = bot;
@@ -46,9 +46,9 @@ public class GoalManager {
         }
 
         currentGoal = next_goal;
-        currentGoal.perform();
+        bot.setPostfix(currentGoal.toString()+" "+bot.getNeedsMeName()+" "+bot.getNeedsMeLocation());
 
-        bot.setPostfix(currentGoal.toString()+" "+currentGoal.getPriority()+" "+bot.isSniping());
+        currentGoal.perform();
 
         return currentGoal;
     }
