@@ -135,24 +135,19 @@ public class MyAlterEgo extends UT2004BotTCController {
     private final Heatup targetHU = new Heatup(5000);
 
     /**
-     * get enemy flag
-     */
-    private final Heatup friendDefender = new Heatup(8000);
-
-    /**
      * protect flag for some time
      */
     private final Heatup coverBack = new Heatup(7000);
 
     /**
+     * need help for some time
+     */
+    private final Heatup friendDefender = new Heatup(7000);
+
+    /**
      * if we want to coverBack cooldown and do some action instead
      */
     private final Cooldown coverBackCD = new Cooldown(12000);
-
-    /**
-     * need help for some time
-     */
-    private final Heatup helpHU = new Heatup(7000);
 
     private boolean flagHunter;
 
@@ -447,12 +442,12 @@ public class MyAlterEgo extends UT2004BotTCController {
     @EventListener(eventClass = TCSupportMe.class)
     public void supportRequest(TCSupportMe seen) {
         whoNeedsMe = seen.player;
-        helpHU.heat();
+        friendDefender.heat();
     }
 
     @EventListener(eventClass = TCIamOK.class)
     public void abbadonSupport(TCIamOK seen) {
-        if (helpHU.isCool()) {
+        if (friendDefender.isCool()) {
             whoNeedsMe = null;
         }
     }
@@ -852,7 +847,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public int supportPriority() {
-        return helpHU.isHot() ? 60 : 0;
+        return friendDefender.isHot() ? 60 : 0;
     }
 
     public ILocated supportTarget() {
