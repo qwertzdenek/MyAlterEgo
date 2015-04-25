@@ -913,12 +913,8 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
 
         MyAlterEgoParams[] teamParams = new MyAlterEgoParams[numberOfBots];
-        for (int i = 0; i < numberOfBots / 2; i++) {
+        for (int i = 0; i < numberOfBots; i++) {
             teamParams[i] = new MyAlterEgoParams().setTeam(team).setOrder(i).setSkillLevel(skill);
-        }
-
-        for (int i = numberOfBots / 2; i < numberOfBots; i++) {
-            teamParams[i] = new MyAlterEgoParams().setTeam(1-team).setOrder(i).setSkillLevel(skill);
         }
 
         new UT2004BotRunner<UT2004Bot, UT2004BotParameters>(MyAlterEgo.class, "EgoTeam", address, port).setMain(true).startAgents(teamParams);
