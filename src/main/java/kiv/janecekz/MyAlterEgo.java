@@ -391,12 +391,15 @@ public class MyAlterEgo extends UT2004BotTCController {
     public void flagStateChanged(IWorldObjectEvent event) {
         FlagInfoMessage fi = (FlagInfoMessage) event.getObject();
         int team = fi.getTeam();
+        
+        if (fi.getSimTime() < flagTime[team])
+            return;
 
         if (event instanceof WorldObjectUpdatedEvent) { // send to team
             if (fi.getState().equalsIgnoreCase("held") && !fi.isVisible()) {
                 flagLoc[team] = null;
                 flagTime[team] = fi.getSimTime();
-            } else {
+            } else if (fi.isVisible()) {
                 tcClient.sendToTeam(new TCFlagUpdate(fi.getTeam(), fi.getLocation(), fi.getSimTime(), FlagHuntingState.NEW_FP));
             }
         } else if (event instanceof WorldObjectAppearedEvent) {
@@ -436,7 +439,6 @@ public class MyAlterEgo extends UT2004BotTCController {
     @EventListener(eventClass = TCCoverBack.class)
     public void coverBack(TCCoverBack seen) {
         if (coverBackCD.isCool()) {
-            log.info("Covering back");
             coverBack.heat();
             coverBackCD.use();
         }
@@ -902,13 +904,12 @@ public class MyAlterEgo extends UT2004BotTCController {
      * @param args
      */
     public static void main(String args[]) throws PogamutException {
-        int year, team, skill, numberOfBots, port;
+        int team, skill, numberOfBots, port;
         String address;
-        
+
         UT2004TCServer.startTCServer();
-        
+
         try {
-            year            = Integer.parseInt(args[0]);
             team            = Integer.parseInt(args[1]);
             skill           = Integer.parseInt(args[2]);
             numberOfBots    = Integer.parseInt(args[3]);
