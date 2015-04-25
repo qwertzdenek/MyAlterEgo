@@ -46,7 +46,7 @@ public class GoalManager {
         }
 
         currentGoal = next_goal;
-        bot.setPostfix(currentGoal.toString() + " " + bot.isCoveringBack());
+        bot.setPostfix(currentGoal.toString());
 
         currentGoal.perform();
 
