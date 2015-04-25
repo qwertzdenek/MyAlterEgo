@@ -37,6 +37,7 @@ public class GetEnemyFlag extends Goal {
             } else {
                 if (bot.getCTF().isEnemyFlagHome()) {
                     bot.goCovered(bot.getEnemyFlagBase().getLocation());
+                    bot.setBackup();
                 } else {
                     Location target = bot.getEnemyFlagLocation();
                     if (target == null) {
@@ -50,7 +51,6 @@ public class GetEnemyFlag extends Goal {
             bot.goCovered(bot.getEnemyFlagBase().getLocation());
         }
 
-        bot.setBackup();
         if (bot.isDangerous(bot.getInfo().getLocation())) {
             bot.callHelp();
         }

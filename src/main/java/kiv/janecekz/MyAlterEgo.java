@@ -105,15 +105,6 @@ public class MyAlterEgo extends UT2004BotTCController {
     private Player enemy = null;
 
     /**
-     * Path auto fixer watches for navigation failures and if some navigation
-     * link is found to be unwalkable, it removes it from underlying navigation
-     * graph.
-     *
-     * Note that UT2004 navigation graphs are some times VERY stupid or contains
-     * VERY HARD TO FOLLOW links...
-     */
-    //protected UT2004PathAutoFixer autoFixer;
-    /**
      * Stores target location.
      */
     private NavPoint pathTarget = null;
@@ -148,6 +139,11 @@ public class MyAlterEgo extends UT2004BotTCController {
      * if we want to coverBack cooldown and do some action instead
      */
     private final Cooldown coverBackCD = new Cooldown(12000);
+
+    /**
+     * We don't want to spam teamcomm to much with our position
+     */
+    private final Cooldown locUpdateCd = new Cooldown(1000);
 
     private boolean flagHunter;
 
@@ -202,6 +198,8 @@ public class MyAlterEgo extends UT2004BotTCController {
      */
     @Override
     public void botInitialized(GameInfo gameInfo, ConfigChange currentConfig, InitedMessage init) {
+        tabooItems = new TabooSet<Item>(bot);
+        
         if (navBuilder.isMapName("DM-1on1-Albatross")) {
             navBuilder.removeEdge("JumpSpot8", "PathNode88");
         }
@@ -242,8 +240,10 @@ public class MyAlterEgo extends UT2004BotTCController {
             navBuilder.removeEdge("InventorySpot2", "AIMarker6");
             navBuilder.removeEdge("JumpSpot3", "xBlueFlagBase0");
         }
-
-        tabooItems = new TabooSet<Item>(bot);
+        if (navBuilder.isMapName("CTF-Citadel")) {
+            tabooItems.add(items.getItem("CTF-Citadel.InventorySpot232"));
+            tabooItems.add(items.getItem("CTF-Citadel.InventorySpot233"));
+        }
 
         goalManager = new GoalManager(this);
 
@@ -254,7 +254,6 @@ public class MyAlterEgo extends UT2004BotTCController {
         goalManager.addGoal(new CloseInOnEnemy(this));
         goalManager.addGoal(new SupportFriend(this));
 
-        // TODO: add navigation fallback
         UT2004AcceleratedPathExecutor accPathExecutor = ((UT2004AcceleratedPathExecutor) nmNav.getPathExecutor());
         accPathExecutor.removeAllStuckDetectors();
 
@@ -276,8 +275,8 @@ public class MyAlterEgo extends UT2004BotTCController {
         weaponPrefs.addGeneralPref(UT2004ItemType.LINK_GUN, false); // secondary
 
         weaponPrefs.newPrefsRange(100).add(UT2004ItemType.SHIELD_GUN, true);
-        weaponPrefs.newPrefsRange(300).add(UT2004ItemType.FLAK_CANNON, true).add(UT2004ItemType.LINK_GUN, true);
-        weaponPrefs.newPrefsRange(1000).add(UT2004ItemType.MINIGUN, true);
+        weaponPrefs.newPrefsRange(300).add(UT2004ItemType.FLAK_CANNON, true).add(UT2004ItemType.BIO_RIFLE, true);
+        weaponPrefs.newPrefsRange(700).add(UT2004ItemType.MINIGUN, true).add(UT2004ItemType.LINK_GUN, true);
         weaponPrefs.newPrefsRange(1300).add(UT2004ItemType.LIGHTNING_GUN, true).add(UT2004ItemType.SHOCK_RIFLE, true);
     }
 
@@ -376,6 +375,7 @@ public class MyAlterEgo extends UT2004BotTCController {
                 flagHunter = false;
             }
         }
+        backupPlayer = null;
         reset();
     }
 
@@ -390,11 +390,16 @@ public class MyAlterEgo extends UT2004BotTCController {
     @ObjectClassListener(objectClass = FlagInfo.class)
     public void flagStateChanged(IWorldObjectEvent event) {
         FlagInfoMessage fi = (FlagInfoMessage) event.getObject();
+        int team = fi.getTeam();
 
         if (event instanceof WorldObjectUpdatedEvent) { // send to team
-            tcClient.sendToTeam(new TCFlagUpdate(fi.getTeam(), fi.getLocation(), fi.getSimTime(), FlagHuntingState.NEW_FP));
+            if (fi.getState().equalsIgnoreCase("held") && !fi.isVisible()) {
+                flagLoc[team] = null;
+                flagTime[team] = fi.getSimTime();
+            } else {
+                tcClient.sendToTeam(new TCFlagUpdate(fi.getTeam(), fi.getLocation(), fi.getSimTime(), FlagHuntingState.NEW_FP));
+            }
         } else if (event instanceof WorldObjectAppearedEvent) {
-            int team = fi.getTeam();
             flagLoc[team] = fi.getLocation();
             flagTime[team] = fi.getSimTime();
         }
@@ -402,7 +407,9 @@ public class MyAlterEgo extends UT2004BotTCController {
 
     @EventListener(eventClass = HearNoise.class)
     public void hearNoise(HearNoise event) {
-        move.turnHorizontal((int) (event.getRotation().yaw / rotUnit - 180));
+        if (coverBack.isHot()) {
+            move.turnHorizontal((int) (event.getRotation().yaw / rotUnit - 180));
+        }
     }
 
     // TEAMCOM
@@ -429,6 +436,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     @EventListener(eventClass = TCCoverBack.class)
     public void coverBack(TCCoverBack seen) {
         if (coverBackCD.isCool()) {
+            log.info("Covering back");
             coverBack.heat();
             coverBackCD.use();
         }
@@ -462,7 +470,7 @@ public class MyAlterEgo extends UT2004BotTCController {
 
         // copy zprava PlayerMessage do playerUpdate
         PlayerMessage playerUpdate = new PlayerMessage(
-                seen.playerId, null, "unknown", false, null, false, null, seen.location,
+                seen.playerId, null, null, false, null, false, null, seen.location,
                 null, seen.team, null, false, 0, "None", "None", "None", "None", "None");
 
         world.notifyImmediately(playerUpdate);
@@ -471,7 +479,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     @EventListener(eventClass = TCPlayerUpdate.class)
     public void playerUpdate(TCPlayerUpdate pl) {
         PlayerMessage playerUpdate = new PlayerMessage(
-                pl.playerId, null, "unknown", false, null, false, null, pl.location,
+                pl.playerId, null, null, false, null, false, null, pl.location,
                 null, info.getTeam(), null, false, 0, "None", "None", "None", "None", "None");
 
         world.notifyImmediately(playerUpdate);
@@ -493,11 +501,6 @@ public class MyAlterEgo extends UT2004BotTCController {
                     && item.getLocation().equals(pathTarget.getLocation(), 10d)) {
                 tabooItems.add(item, 10d);
             }
-//            else if (pathTarget.getLocation().equals(flagLoc[info.getTeam()], 200d)) {
-//                tcClient.sendToAll(new TCFlagUpdate(info.getTeam(), null, getSimTime(), FlagHuntingState.INVALID));
-//            } else if (pathTarget.getLocation().equals(flagLoc[1-info.getTeam()], 200d)) {
-//                tcClient.sendToAll(new TCFlagUpdate(1-info.getTeam(), null, getSimTime(), FlagHuntingState.INVALID));
-//            }
         } else if (event == PathExecutorState.TARGET_REACHED) {
             if (item != null && pathTarget != null) {
                 tabooItems.add(item, 10d);
@@ -543,13 +546,11 @@ public class MyAlterEgo extends UT2004BotTCController {
         if (flagHunter && tcClient.isConnected() && tcClient.isConnected(helper)) {
             tcClient.sendToBot(helper, new TCIamOK(info.getId()));
             helper = null;
-
-            backupPlayer = null;
         }
     }
 
     public void setBackup() {
-        if (flagHunter && players.getFriends().size() > 2 && backupPlayer == null) {
+        if (flagHunter && players.getFriends().size() > 2) {
             Collection<Player> col = new LinkedList<Player>(players.getFriends().values());
             col.remove(players.getPlayer(info.getId()));
             col.remove(players.getPlayer(helper));
@@ -601,7 +602,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
     }
 
-    private void navigateCoverPath(NavPoint target) { // TODO: update when new enemy seen
+    private void navigateCoverPath(NavPoint target) {
         if (pathTarget == null || !target.equals(pathTarget)) {
             pathTarget = target;
             actualPath = generateCoverPath(pathTarget);
@@ -777,7 +778,7 @@ public class MyAlterEgo extends UT2004BotTCController {
     }
 
     public void shoot() {
-        if (enemy != null && enemy.isVisible() && enemy.getLocation().getDistance(info.getLocation()) < 2000) {
+        if (enemy != null && enemy.isVisible() && enemy.getLocation().getDistance(info.getLocation()) < 4000) {
             shoot.shoot(weaponPrefs, enemy);
             nmNav.setFocus(enemy);
         } else {
@@ -787,7 +788,7 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
     }
 
-    public void coverYourself() { // TODO: protect from the agressive player
+    public void coverYourself() {
         Player p = DistanceUtils.getNearest(players.getVisibleEnemies().values(), info.getLocation());
         if (p == null) {
             nmNav.setFocus(null);
@@ -810,8 +811,11 @@ public class MyAlterEgo extends UT2004BotTCController {
     public void logic() throws PogamutException {
         goalManager.executeBestGoal();
 
-        // inform team members
-        tcClient.sendToTeamOthers(new TCPlayerUpdate(info.getId(), info.getLocation()));
+        // inform team members about our location
+        if (locUpdateCd.isCool()) {
+            tcClient.sendToTeamOthers(new TCPlayerUpdate(info.getId(), info.getLocation()));
+            locUpdateCd.use();
+        }
     }
 
     public NavPoint getOurFlagBase() {
@@ -865,22 +869,6 @@ public class MyAlterEgo extends UT2004BotTCController {
         config.setName(name + ": " + s);
     }
 
-    public String getNeedsMeName() {
-        Player p = players.getPlayer(whoNeedsMe);
-        if (p == null)
-            return null;
-        else
-            return p.getName();
-    }
-
-    public Location getNeedsMeLocation() {
-        Player p = players.getPlayer(whoNeedsMe);
-        if (p == null)
-            return null;
-        else
-            return p.getLocation();
-    }
-
     public boolean isDangerous(ILocated node) {
         boolean isDangerous = false;
         for (Player player : players.getEnemies().values()) {
@@ -905,7 +893,6 @@ public class MyAlterEgo extends UT2004BotTCController {
         nmNav.stopNavigation();
         shoot.stopShooting();
         nmNav.setFocus(null);
-        coverBack.clear();
     }
 
     /**
@@ -915,15 +902,32 @@ public class MyAlterEgo extends UT2004BotTCController {
      * @param args
      */
     public static void main(String args[]) throws PogamutException {
+        int year, team, skill, numberOfBots, port;
+        String address;
+        
         UT2004TCServer.startTCServer();
+        
+        try {
+            year            = Integer.parseInt(args[0]);
+            team            = Integer.parseInt(args[1]);
+            skill           = Integer.parseInt(args[2]);
+            numberOfBots    = Integer.parseInt(args[3]);
+            address              = args[4];
+            port            = 3000;
+        } catch (Exception e) {
+            System.out.println("Wrong arguments.");
+            return;
+        }
 
-        new UT2004BotRunner<UT2004Bot, UT2004BotParameters>(MyAlterEgo.class, "TeamCTF").setMain(true).setHost("localhost").setLogLevel(Level.WARNING).startAgents(
-                new MyAlterEgoParams().setTeam(0).setOrder(0),
-                        new MyAlterEgoParams().setTeam(0).setOrder(0),
-                        new MyAlterEgoParams().setTeam(0).setOrder(0),
-                        new MyAlterEgoParams().setTeam(1).setOrder(0),
-                        new MyAlterEgoParams().setTeam(1).setOrder(0),
-                        new MyAlterEgoParams().setTeam(1).setOrder(0)
-        );
+        MyAlterEgoParams[] teamParams = new MyAlterEgoParams[numberOfBots];
+        for (int i = 0; i < numberOfBots / 2; i++) {
+            teamParams[i] = new MyAlterEgoParams().setTeam(team).setOrder(i).setSkillLevel(skill);
+        }
+
+        for (int i = numberOfBots / 2; i < numberOfBots; i++) {
+            teamParams[i] = new MyAlterEgoParams().setTeam(1-team).setOrder(i).setSkillLevel(skill);
+        }
+
+        new UT2004BotRunner<UT2004Bot, UT2004BotParameters>(MyAlterEgo.class, "EgoTeam", address, port).setMain(true).startAgents(teamParams);
     }
 }

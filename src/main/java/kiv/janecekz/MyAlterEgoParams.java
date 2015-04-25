@@ -18,11 +18,8 @@ package kiv.janecekz;
 
 import cz.cuni.amis.pogamut.ut2004.bot.params.UT2004BotParameters;
 
-/**
- *
- * @author zdenek
- */
 public class MyAlterEgoParams extends UT2004BotParameters {
+
     @Override
     public MyAlterEgoParams setTeam(Integer team) {
         return (MyAlterEgoParams) super.setTeam(team);
@@ -45,5 +42,30 @@ public class MyAlterEgoParams extends UT2004BotParameters {
 
     public int getOrder() {
         return this.order;
+    }
+
+    /**
+     * Agent's skill level.
+     */
+    private int skillLevel;
+
+    /**
+     * Method sets a skill level.
+     *
+     * @param newSkillLevel new skill level
+     * @return this
+     */
+    public MyAlterEgoParams setSkillLevel(int newSkillLevel) {
+        this.skillLevel = newSkillLevel;
+        return this;
+    }
+
+    /**
+     * Method returns a skill level.
+     *
+     * @return skill level
+     */
+    public int getSkillLevel() {
+        return this.skillLevel;
     }
 }
