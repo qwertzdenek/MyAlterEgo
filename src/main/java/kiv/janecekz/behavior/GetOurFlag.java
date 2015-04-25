@@ -51,6 +51,8 @@ public class GetOurFlag extends Goal {
                 } else {
                     if (bot.getOurFlag().getState().equalsIgnoreCase("home")) {
                         bot.goForSniper();
+                    } else if (bot.getInfo().getLocation().equals(flagLocation, 200d)) {
+                        bot.goAround(flagLocation);
                     } else {
                         bot.goTo(flagLocation);
                     }

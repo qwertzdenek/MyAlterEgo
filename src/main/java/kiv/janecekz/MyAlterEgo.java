@@ -708,26 +708,18 @@ public class MyAlterEgo extends UT2004BotTCController {
         }
     }
 
-    public boolean holdingOrSupporting() {
-        FlagInfo ourFlag = ctf.getOurFlag();
+    public void goAround(Location flagLocation) {
+        double coeff;
+        Location locdiff;
 
-        if (ourFlag == null) {
-            return false;
-        }
+        do {
+            while (Math.abs(coeff = getRandom().nextFloat() * 2 - 1) < 0.2)
+                ;
 
-        UnrealId holderId = ourFlag.getHolder();
-
-        if (holderId == null) {
-            return false;
-        }
-
-        if (info.getId().equals(holderId)) {
-            return true;
-        }
-
-        Player holder = players.getPlayer(holderId);
-
-        return holder.getTeam() == info.getTeam() && getInfo().getDistance(holder) < 60d;
+            locdiff = new Location(200 * coeff, 200 * coeff);
+        } while (navMeshModule.getNavMesh().getPolygonId(flagLocation.add(locdiff)) == 0);
+        if (!nmNav.isNavigating())
+            nmNav.navigate(flagLocation.add(locdiff));
     }
 
     public void updateFight() {
